@@ -21,7 +21,7 @@ public class HelloController
     {
         try
         {
-            signService.pleaseSign();
+            signService.newSign();
         }
         catch (Exception e)
         {
