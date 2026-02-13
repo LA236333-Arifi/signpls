@@ -34,8 +34,9 @@ dependencies {
 	implementation 'eu.europa.ec.joinup.sd-dss:dss-pades-pdfbox:6.3'
 	implementation 'eu.europa.ec.joinup.sd-dss:dss-utils-google-guava:6.3'
 	implementation 'eu.europa.ec.joinup.sd-dss:dss-cms-object:6.3'
+	implementation 'eu.europa.ec.joinup.sd-dss:dss-token:6.3'
 
-	//implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server'
+	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server'
 	//implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
 
 	compileOnly 'org.projectlombok:lombok'
