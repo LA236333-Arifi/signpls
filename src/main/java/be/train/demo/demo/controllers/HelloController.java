@@ -1,12 +1,17 @@
 package be.train.demo.demo.controllers;
 
 import be.train.demo.demo.services.SignService;
+import eu.europa.esig.dss.model.DSSDocument;
+import eu.europa.esig.dss.model.FileDocument;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.ResourceUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.swing.text.html.Option;
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
@@ -32,13 +37,13 @@ public class HelloController
         }
     }
 
-    @GetMapping("/dbl")
-    ResponseEntity<String> dbl()
+    @GetMapping("/pen")
+    ResponseEntity<String> pen()
     {
         try
         {
-            signService.dbl();
-            return ResponseEntity.ok("PDF DOUBLE SIGNED");
+            signService.pen();
+            return ResponseEntity.ok("Pen saved !");
         }
         catch (Exception e)
         {
@@ -46,12 +51,29 @@ public class HelloController
         }
     }
 
-    @GetMapping("/wow")
-    ResponseEntity<String> wow()
+    @GetMapping("/doublepen")
+    ResponseEntity<String> doublepen()
     {
         try
         {
-            signService.wow();
+            signService.doublepen();
+            return ResponseEntity.ok("Double Pen saved !");
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @GetMapping("/sign")
+    ResponseEntity<String> sign()
+    {
+        try
+        {
+            File file = ResourceUtils.getFile("classpath:sample.pdf");
+            DSSDocument toSignDocument = new FileDocument(file);
+            DSSDocument dssDocument = signService.sign(toSignDocument, Optional.empty());
+            signService.sign(dssDocument, Optional.empty());
         }
         catch (Exception e)
         {
@@ -76,11 +98,11 @@ public class HelloController
     }
 
     @GetMapping("/query")
-    public ResponseEntity<List<String>> query()
+    public ResponseEntity<String> query()
     {
         try
         {
-            return ResponseEntity.of(Optional.ofNullable(signService.querySomeData()));
+            return ResponseEntity.ok(signService.querySomeData().isEmpty() ? "Empty" : signService.querySomeData().getFirst());
         }
         catch (Exception e)
         {
