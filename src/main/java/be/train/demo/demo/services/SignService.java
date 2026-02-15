@@ -2,7 +2,9 @@ package be.train.demo.demo.services;
 
 import eu.europa.esig.dss.cades.signature.CMSBuilder;
 import eu.europa.esig.dss.cms.CMS;
+import eu.europa.esig.dss.cms.CMSUtils;
 import eu.europa.esig.dss.enumerations.DigestAlgorithm;
+import eu.europa.esig.dss.enumerations.EncryptionAlgorithm;
 import eu.europa.esig.dss.enumerations.SignatureAlgorithm;
 import eu.europa.esig.dss.enumerations.SignatureLevel;
 import eu.europa.esig.dss.model.*;
@@ -33,10 +35,12 @@ import org.springframework.util.ResourceUtils;
 import javax.swing.text.Document;
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.*;
 
@@ -81,6 +85,7 @@ public class SignService
         signatureParameters.setDigestAlgorithm(DigestAlgorithm.SHA256);
         signatureParameters.setReason("La raison est simple xyz");
         signatureParameters.setSignerName("Jean Claude");
+        signatureParameters.setLocation("Belgium");
 
         return signatureParameters;
     }
@@ -172,7 +177,7 @@ public class SignService
     public DSSDocument sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
     {
         KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/localhost.p12", pp))
+        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/signing.p12", pp))
         {
             PAdESSignatureParameters signatureParameters = initParameters();
 
@@ -337,52 +342,59 @@ public class SignService
 
     public DSSDocument signExternal(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
     {
-        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/localhost.p12", pp))
+        PAdESSignatureParameters signatureParameters = initParameters();
+
+        // initialize signature field parameters
+        // the origin is the left and top corner of the page
+        if (fieldParameters.isPresent())
         {
-            PAdESSignatureParameters signatureParameters = initParameters();
-
-            // Set the signing certificate and a certificate chain for the used token
-            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
-            signatureParameters.setSigningCertificate(privateKey.getCertificate());
-            signatureParameters.setCertificateChain(privateKey.getCertificateChain());
-
-            // initialize signature field parameters
-            // the origin is the left and top corner of the page
-            if (fieldParameters.isPresent())
-            {
-                SignatureImageParameters imageParameters = new SignatureImageParameters();
-                imageParameters.setImage(signatureImage);
-                imageParameters.setFieldParameters(fieldParameters.get());
-                signatureParameters.setImageParameters(imageParameters);
-            }
-
-            signatureParameters.bLevel().setSigningDate(new Date());
-
-            ExternalCMSService padesCMSGeneratorService = new ExternalCMSService(certificateVerifier);
-
-            // 1. Generate DTBS for PAdES
-            ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
-
-            // Do we have to send the whole data or the hash ?
-            //byte[] gg = DSSUtils.digest(DigestAlgorithm.SHA256, dataToSign.getBytes());
-
-
-            // 2. Send DTBS to itsme and get signature value
-            SignatureValue signatureValue = computeSignatureValueRemotely(
-                    dataToSign,
-                    signatureParameters.getDigestAlgorithm()
-            );
-
-            DSSDocument signedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
-            signedDocument.save("penpdf.pdf");
-            return signedDocument;
+            SignatureImageParameters imageParameters = new SignatureImageParameters();
+            imageParameters.setImage(signatureImage);
+            imageParameters.setFieldParameters(fieldParameters.get());
+            signatureParameters.setImageParameters(imageParameters);
         }
+
+        signatureParameters.bLevel().setSigningDate(new Date());
+
+        try (InputStream in = new FileInputStream("self-signed.crt"))
+        {
+            CertificateFactory factory = CertificateFactory.getInstance("X.509");
+
+            X509Certificate x509Certificate =
+                    (X509Certificate) factory.generateCertificate(in);
+
+            CertificateToken certificateToken = new CertificateToken(x509Certificate);
+            signatureParameters.setSigningCertificate(certificateToken);
+        }
+        catch (Exception e)
+        {
+            System.err.println("Erreur lors du parsing du certificat X.509");
+            return toSignDocument;
+        }
+
+        ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
+
+        byte[] rawDigest = DSSUtils.digest(DigestAlgorithm.SHA256, dataToSign.getBytes());
+
+        DSSMessageDigest messageDigest = new DSSMessageDigest(DigestAlgorithm.SHA256, rawDigest);
+
+        System.out.println(messageDigest);
+
+        SignatureValue signatureValue = computeSignatureValueRemotely(messageDigest);
+        byte[] rawBytes = Files.readAllBytes(Path.of("document-signed.p7s"));
+
+        signatureValue.setAlgorithm(SignatureAlgorithm.RSA_SHA256);
+        signatureValue.setValue(rawBytes);
+
+        DSSDocument signedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
+        signedDocument.save("remotesignpdf.pdf");
+        return signedDocument;
     }
 
-    private SignatureValue computeSignatureValueRemotely(ToBeSigned dataToSign, DigestAlgorithm digestAlgorithm)
+    private SignatureValue computeSignatureValueRemotely(DSSMessageDigest messageDigest)
     {
-        return new SignatureValue();
+        SignatureValue signatureValue = new SignatureValue();
+        return signatureValue;
     }
 }
 

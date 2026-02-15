@@ -65,6 +65,22 @@ public class HelloController
         }
     }
 
+    @GetMapping("/external")
+    ResponseEntity<String> external()
+    {
+        try
+        {
+            File file = ResourceUtils.getFile("classpath:sample.pdf");
+            DSSDocument toSignDocument = new FileDocument(file);
+            signService.signExternal(toSignDocument, Optional.empty());
+            return ResponseEntity.ok("Double Pen saved !");
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
     @GetMapping("/sign")
     ResponseEntity<String> sign()
     {
