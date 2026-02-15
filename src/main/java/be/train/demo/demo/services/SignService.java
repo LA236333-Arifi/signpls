@@ -335,31 +335,54 @@ public class SignService
         }
     }
 
-    public void signExternalCMS()
+    public DSSDocument signExternal(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
     {
-        /*
-        ExternalCMSService padesCMSGeneratorService = new ExternalCMSService(certificateVerifier);
+        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
+        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/localhost.p12", pp))
+        {
+            PAdESSignatureParameters signatureParameters = initParameters();
 
-        // Configure signature parameters
-        // NOTE: parameters concern only CMS signature creation, but the signature level shall correspond
-        // to the target level of a PAdES signature
-        PAdESSignatureParameters signatureParameters = new PAdESSignatureParameters();
-        signatureParameters.bLevel().setSigningDate(new Date());
-        signatureParameters.setSigningCertificate(getSigningCert());
-        signatureParameters.setCertificateChain(getCertificateChain());
-        signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_B);
+            // Set the signing certificate and a certificate chain for the used token
+            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
+            signatureParameters.setSigningCertificate(privateKey.getCertificate());
+            signatureParameters.setCertificateChain(privateKey.getCertificateChain());
 
-        DSSMessageDigest messageDigest = new DSSMessageDigest(); // needs this input
+            // initialize signature field parameters
+            // the origin is the left and top corner of the page
+            if (fieldParameters.isPresent())
+            {
+                SignatureImageParameters imageParameters = new SignatureImageParameters();
+                imageParameters.setImage(signatureImage);
+                imageParameters.setFieldParameters(fieldParameters.get());
+                signatureParameters.setImageParameters(imageParameters);
+            }
 
-        // Create DTBS (data to be signed) using the message-digest of a PDF signature byte range obtained from a client
-        ToBeSigned dataToSign = padesCMSGeneratorService.getDataToSign(messageDigest, signatureParameters);
+            signatureParameters.bLevel().setSigningDate(new Date());
 
-        // Sign the DTBS using a private key connection or remote-signing service
-        SignatureValue signatureValue = computeSignatureValue(dataToSign, signatureParameters.getDigestAlgorithm());
+            ExternalCMSService padesCMSGeneratorService = new ExternalCMSService(certificateVerifier);
 
-        // Create a CMS signature using the provided message-digest, signature parameters and the signature value
-        DSSDocument cmsSignature = padesCMSGeneratorService.signMessageDigest(messageDigest, signatureParameters, signatureValue);
-        */
+            // 1. Generate DTBS for PAdES
+            ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
+
+            // Do we have to send the whole data or the hash ?
+            //byte[] gg = DSSUtils.digest(DigestAlgorithm.SHA256, dataToSign.getBytes());
+
+
+            // 2. Send DTBS to itsme and get signature value
+            SignatureValue signatureValue = computeSignatureValueRemotely(
+                    dataToSign,
+                    signatureParameters.getDigestAlgorithm()
+            );
+
+            DSSDocument signedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
+            signedDocument.save("penpdf.pdf");
+            return signedDocument;
+        }
+    }
+
+    private SignatureValue computeSignatureValueRemotely(ToBeSigned dataToSign, DigestAlgorithm digestAlgorithm)
+    {
+        return new SignatureValue();
     }
 }
 
