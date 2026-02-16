@@ -3,6 +3,9 @@ package be.train.demo.demo.controllers;
 import be.train.demo.demo.services.SignService;
 import eu.europa.esig.dss.model.DSSDocument;
 import eu.europa.esig.dss.model.FileDocument;
+import eu.europa.esig.dss.model.InMemoryDocument;
+import eu.europa.esig.dss.pades.SignatureFieldParameters;
+import eu.europa.esig.dss.pades.SignatureImageParameters;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.ResourceUtils;
@@ -70,10 +73,55 @@ public class HelloController
     {
         try
         {
+            // initialize signature field parameters
+            SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
+            // the origin is the left and top corner of the page
+            fieldParameters.setOriginX(10);
+            fieldParameters.setOriginY(10);
+            fieldParameters.setWidth(50);
+            fieldParameters.setHeight(50);
+
+            // Check if we can have the same field id for multiple fields
+            //fieldParameters.setFieldId("some-field-id");
             File file = ResourceUtils.getFile("classpath:sample.pdf");
             DSSDocument toSignDocument = new FileDocument(file);
-            DSSDocument dssDocument = signService.sign(toSignDocument, Optional.empty());
-            signService.sign(dssDocument, Optional.empty());
+            DSSDocument dssDocument = signService.sign(toSignDocument, Optional.of(fieldParameters));
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+
+        return ResponseEntity.ok("PDF Saved (new way) !");
+    }
+
+    @GetMapping("/doublesign")
+    ResponseEntity<String> doublesign()
+    {
+        try
+        {
+            // initialize signature field parameters
+            SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
+            // the origin is the left and top corner of the page
+            fieldParameters.setOriginX(10);
+            fieldParameters.setOriginY(10);
+            fieldParameters.setWidth(50);
+            fieldParameters.setHeight(50);
+
+            // Check if we can have the same field id for multiple fields
+            //fieldParameters.setFieldId("some-field-id");
+            File file = ResourceUtils.getFile("classpath:sample.pdf");
+            DSSDocument toSignDocument = new FileDocument(file);
+            DSSDocument dssDocument = signService.sign(toSignDocument, Optional.of(fieldParameters));
+
+            fieldParameters = new SignatureFieldParameters();
+            // the origin is the left and top corner of the page
+            fieldParameters.setOriginX(80);
+            fieldParameters.setOriginY(10);
+            fieldParameters.setWidth(50);
+            fieldParameters.setHeight(50);
+
+            signService.sign(dssDocument, Optional.of(fieldParameters));
         }
         catch (Exception e)
         {
