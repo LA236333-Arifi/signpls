@@ -8,26 +8,37 @@ import eu.europa.esig.dss.enumerations.EncryptionAlgorithm;
 import eu.europa.esig.dss.enumerations.SignatureAlgorithm;
 import eu.europa.esig.dss.enumerations.SignatureLevel;
 import eu.europa.esig.dss.model.*;
+import eu.europa.esig.dss.model.signature.SignaturePolicy;
 import eu.europa.esig.dss.model.x509.CertificateToken;
 import eu.europa.esig.dss.pades.PAdESSignatureParameters;
+import eu.europa.esig.dss.pades.PAdESTimestampParameters;
 import eu.europa.esig.dss.pades.SignatureFieldParameters;
 import eu.europa.esig.dss.pades.SignatureImageParameters;
 import eu.europa.esig.dss.pades.signature.ExternalCMSService;
 import eu.europa.esig.dss.pades.signature.PAdESService;
 import eu.europa.esig.dss.pades.signature.PAdESWithExternalCMSService;
+import eu.europa.esig.dss.pades.validation.timestamp.PdfTimestampToken;
 import eu.europa.esig.dss.pdf.PDFSignatureService;
 import eu.europa.esig.dss.pdf.PdfSignatureCache;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxNativeObjectFactory;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxSignatureService;
+import eu.europa.esig.dss.service.http.commons.TimestampDataLoader;
+import eu.europa.esig.dss.service.tsp.OnlineTSPSource;
 import eu.europa.esig.dss.spi.DSSUtils;
 import eu.europa.esig.dss.spi.validation.CertificateVerifier;
 import eu.europa.esig.dss.spi.validation.CommonCertificateVerifier;
+import eu.europa.esig.dss.spi.x509.revocation.crl.CRLToken;
+import eu.europa.esig.dss.spi.x509.tsp.TSPSource;
+import eu.europa.esig.dss.spi.x509.tsp.TimestampToken;
 import eu.europa.esig.dss.token.*;
 import eu.europa.esig.dss.utils.Utils;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
 import org.bouncycastle.cms.SignerInfoGenerator;
+import org.bouncycastle.cms.SignerInformation;
+import org.bouncycastle.operator.DigestCalculatorProvider;
+import org.bouncycastle.tsp.TSPUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.ResourceUtils;
@@ -52,10 +63,34 @@ public class SignService
     private final PAdESService padesService = new PAdESService(certificateVerifier);
     private final InMemoryDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"));
 
-    public void test()
+    public void clientSidePadesForRemoteSigning() throws Exception
     {
-        PAdESWithExternalCMSService CmsService;
-        //CmsService.isValidCMSSignedData();
+        File file = ResourceUtils.getFile("classpath:sample.pdf");
+        DSSDocument toSignDocument = new FileDocument(file);
+
+        var params = initParameters();
+
+        PAdESWithExternalCMSService CmsService = new PAdESWithExternalCMSService();
+        DSSMessageDigest messageDigest = CmsService.getMessageDigest(toSignDocument, params);
+        DSSDocument cmsDoc = toSignDocument; // temp: affect the received cms
+        if (CmsService.isValidPAdESBaselineCMSSignedData(messageDigest, cmsDoc))
+        {
+            CmsService.signDocument(toSignDocument, params, cmsDoc);
+        }
+        else
+        {
+            throw new RuntimeException("Not a valid PAdES Signature received from the server");
+        }
+    }
+
+    public OnlineTSPSource getTspSource()
+    {
+        String tspServer = "https://freetsa.org/tsr";
+
+        OnlineTSPSource onlineTSPSource = new OnlineTSPSource(tspServer);
+        onlineTSPSource.setDataLoader(new TimestampDataLoader());
+
+        return onlineTSPSource;
     }
 
     public List<String> querySomeData() throws Exception
@@ -81,11 +116,15 @@ public class SignService
     {
         PAdESSignatureParameters signatureParameters = new PAdESSignatureParameters();
         signatureParameters.setAppName("MY SUPER DEMO APP");
-        signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_B);
+        //signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_B);
+        signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_T);
         signatureParameters.setDigestAlgorithm(DigestAlgorithm.SHA256);
         signatureParameters.setReason("La raison est simple xyz");
         signatureParameters.setSignerName("Jean Claude");
         signatureParameters.setLocation("Belgium");
+
+        // Maybe add more bLevel attributes?
+        signatureParameters.bLevel().setSigningDate(new Date());
 
         return signatureParameters;
     }
@@ -174,10 +213,22 @@ public class SignService
         }
     }
 
+    public void revoke() throws Exception
+    {
+        CRLToken crlToken;
+        PdfTimestampToken tt;
+        //signatureParameters.setContentTimestampParameters(new PAdESTimestampParameters(signatureParameters.getDigestAlgorithm()));
+        //TimestampToken timestampToken =  padesService.getContentTimestamp(toSignDocument, signatureParameters);
+        //signatureParameters.setContentTimestamps(Arrays.asList(timestampToken));
+        //System.out.println(timestampToken);
+        //certificateVerifier.setAlertOnMissingRevocationData(null); // Désactive l'alerte
+        //toSignDocument = padesService.timestamp(toSignDocument, new PAdESTimestampParameters(signatureParameters.getDigestAlgorithm()));
+    }
+
     public DSSDocument sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
     {
         KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/signing.p12", pp))
+        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/self-signed.p12", pp))
         {
             PAdESSignatureParameters signatureParameters = initParameters();
 
@@ -196,11 +247,13 @@ public class SignService
                 signatureParameters.setImageParameters(imageParameters);
             }
 
+            padesService.setTspSource(getTspSource());
+
             // Sign in three steps using the document obtained after the first signature
             ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
             SignatureValue signatureValue = goodUserToken.sign(dataToSign, signatureParameters.getDigestAlgorithm(), privateKey);
             DSSDocument signedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
-            signedDocument.save("penpdf.pdf");
+            signedDocument.save("signedpdf.pdf");
             return signedDocument;
         }
     }
@@ -233,6 +286,7 @@ public class SignService
             fieldParameters.setOriginY(400);
             fieldParameters.setWidth(300);
             fieldParameters.setHeight(200);
+            fieldParameters.setFieldId("some-field-id");
             //signatureParameters.setImageParameters(imageParameters);
 
             // Sign in three steps using the document obtained after the first signature
@@ -397,5 +451,3 @@ public class SignService
         return signatureValue;
     }
 }
-
-
