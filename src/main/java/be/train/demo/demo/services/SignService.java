@@ -22,6 +22,7 @@ import eu.europa.esig.dss.pdf.PDFSignatureService;
 import eu.europa.esig.dss.pdf.PdfSignatureCache;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxNativeObjectFactory;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxSignatureService;
+import eu.europa.esig.dss.service.http.commons.CommonsDataLoader;
 import eu.europa.esig.dss.service.http.commons.OCSPDataLoader;
 import eu.europa.esig.dss.service.http.commons.TimestampDataLoader;
 import eu.europa.esig.dss.service.ocsp.OnlineOCSPSource;
@@ -118,6 +119,7 @@ public class SignService
         signatureParameters.setAppName("MY SUPER DEMO APP");
         //signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_B);
         signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_T);
+        //signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_LT);
         signatureParameters.setDigestAlgorithm(DigestAlgorithm.SHA256);
         signatureParameters.setReason("La raison est simple xyz");
         signatureParameters.setSignerName("Jean Claude");
@@ -190,6 +192,7 @@ public class SignService
         // processing a querying of a remote revocation server.
         // `CommonsDataLoader` instance is used by default.
         onlineOCSPSource.setDataLoader(new OCSPDataLoader());
+        CommonsDataLoader gg;
 
         certificateVerifier.setOcspSource(onlineOCSPSource);
         //signatureParameters.setContentTimestampParameters(new PAdESTimestampParameters(signatureParameters.getDigestAlgorithm()));
@@ -230,6 +233,11 @@ public class SignService
             }
 
             padesService.setTspSource(getTspSource());
+
+            // Only for pades baseline LT (QES only)
+            //OnlineOCSPSource onlineOCSPSource = new OnlineOCSPSource();
+            //onlineOCSPSource.setDataLoader(new OCSPDataLoader());
+            //certificateVerifier.setOcspSource(onlineOCSPSource);
 
             // Sign in three steps using the document obtained after the first signature
             ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
