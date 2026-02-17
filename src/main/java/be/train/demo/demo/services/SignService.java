@@ -92,8 +92,8 @@ public class SignService
     private CertificatesHolder queryUserCertificates()
     {
         //fixme: these are just dummy certificates - replace with real implementation
-        Certificate[] certs = new Certificate[10];
-        return certs;
+        CertificatesHolder certificatesHolder = new CertificatesHolder();
+        return certificatesHolder;
     }
 
     public OnlineTSPSource getTspSource()
