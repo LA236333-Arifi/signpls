@@ -1,6 +1,7 @@
 package be.train.demo.demo.services;
 
 import be.train.demo.demo.models.CertificatesHolder;
+import com.nimbusds.jose.shaded.gson.JsonObject;
 import eu.europa.esig.dss.cades.signature.CMSBuilder;
 import eu.europa.esig.dss.cms.CMS;
 import eu.europa.esig.dss.cms.CMSSignedDocument;
@@ -121,6 +122,17 @@ public class SignService
         signatureParameters.bLevel().setSigningDate(new Date());
 
         return signatureParameters;
+    }
+
+    public CertificateToken getTokenFromJson(JsonObject jsonObject) throws Exception
+    {
+        String certBase64 = jsonObject.getAsString();
+        byte[] certBytes = Base64.getDecoder().decode(certBase64);
+
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        X509Certificate cert = (X509Certificate)cf.generateCertificate(new ByteArrayInputStream(certBytes));
+
+        return new CertificateToken(cert);
     }
 
     public String keystore() throws Exception
