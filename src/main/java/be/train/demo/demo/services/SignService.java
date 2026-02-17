@@ -22,12 +22,17 @@ import eu.europa.esig.dss.pdf.PDFSignatureService;
 import eu.europa.esig.dss.pdf.PdfSignatureCache;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxNativeObjectFactory;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxSignatureService;
+import eu.europa.esig.dss.service.http.commons.OCSPDataLoader;
 import eu.europa.esig.dss.service.http.commons.TimestampDataLoader;
+import eu.europa.esig.dss.service.ocsp.OnlineOCSPSource;
 import eu.europa.esig.dss.service.tsp.OnlineTSPSource;
 import eu.europa.esig.dss.spi.DSSUtils;
 import eu.europa.esig.dss.spi.validation.CertificateVerifier;
 import eu.europa.esig.dss.spi.validation.CommonCertificateVerifier;
 import eu.europa.esig.dss.spi.x509.revocation.crl.CRLToken;
+import eu.europa.esig.dss.spi.x509.revocation.ocsp.OCSPCertificateSource;
+import eu.europa.esig.dss.spi.x509.revocation.ocsp.OCSPToken;
+import eu.europa.esig.dss.spi.x509.revocation.ocsp.OfflineOCSPSource;
 import eu.europa.esig.dss.spi.x509.tsp.TSPSource;
 import eu.europa.esig.dss.spi.x509.tsp.TimestampToken;
 import eu.europa.esig.dss.token.*;
@@ -177,6 +182,16 @@ public class SignService
     {
         CRLToken crlToken;
         PdfTimestampToken tt;
+        OCSPToken ocspToken;
+        OCSPCertificateSource certificateSource;
+        // Instantiates a new OnlineOCSPSource object
+        OnlineOCSPSource onlineOCSPSource = new OnlineOCSPSource();
+        // Allows setting an implementation of the `DataLoader` interface,
+        // processing a querying of a remote revocation server.
+        // `CommonsDataLoader` instance is used by default.
+        onlineOCSPSource.setDataLoader(new OCSPDataLoader());
+
+        certificateVerifier.setOcspSource(onlineOCSPSource);
         //signatureParameters.setContentTimestampParameters(new PAdESTimestampParameters(signatureParameters.getDigestAlgorithm()));
         //TimestampToken timestampToken =  padesService.getContentTimestamp(toSignDocument, signatureParameters);
         //signatureParameters.setContentTimestamps(Arrays.asList(timestampToken));
