@@ -1,12 +1,11 @@
 package be.train.demo.demo.services;
 
+import be.train.demo.demo.models.CertificatesHolder;
 import eu.europa.esig.dss.cades.signature.CMSBuilder;
 import eu.europa.esig.dss.cms.CMS;
+import eu.europa.esig.dss.cms.CMSSignedDocument;
 import eu.europa.esig.dss.cms.CMSUtils;
-import eu.europa.esig.dss.enumerations.DigestAlgorithm;
-import eu.europa.esig.dss.enumerations.EncryptionAlgorithm;
-import eu.europa.esig.dss.enumerations.SignatureAlgorithm;
-import eu.europa.esig.dss.enumerations.SignatureLevel;
+import eu.europa.esig.dss.enumerations.*;
 import eu.europa.esig.dss.model.*;
 import eu.europa.esig.dss.model.signature.SignaturePolicy;
 import eu.europa.esig.dss.model.x509.CertificateToken;
@@ -35,12 +34,14 @@ import eu.europa.esig.dss.utils.Utils;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
+import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInfoGenerator;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.operator.DigestCalculatorProvider;
 import org.bouncycastle.tsp.TSPUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.MimeType;
 import org.springframework.util.ResourceUtils;
 
 import javax.swing.text.Document;
@@ -61,7 +62,8 @@ public class SignService
 {
     private final CertificateVerifier certificateVerifier = new CommonCertificateVerifier();
     private final PAdESService padesService = new PAdESService(certificateVerifier);
-    private final InMemoryDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"));
+    private final DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
+    private final PdfBoxSignatureService pdfBoxSignatureService;
 
     public void clientSidePadesForRemoteSigning() throws Exception
     {
@@ -69,18 +71,29 @@ public class SignService
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
+        padesService.setTspSource(getTspSource());
 
-        PAdESWithExternalCMSService CmsService = new PAdESWithExternalCMSService();
-        DSSMessageDigest messageDigest = CmsService.getMessageDigest(toSignDocument, params);
-        DSSDocument cmsDoc = toSignDocument; // temp: affect the received cms
-        if (CmsService.isValidPAdESBaselineCMSSignedData(messageDigest, cmsDoc))
+        CertificatesHolder certificatesHolder = queryUserCertificates();
+        if (certificatesHolder.isValid())
         {
-            CmsService.signDocument(toSignDocument, params, cmsDoc);
+            params.setSigningCertificate(certificatesHolder.getCertificate());
+            params.setCertificateChain(certificatesHolder.getCertificateChain());
         }
-        else
-        {
-            throw new RuntimeException("Not a valid PAdES Signature received from the server");
-        }
+
+        ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
+        byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
+        DSSMessageDigest messageDigest = new DSSMessageDigest(params.getDigestAlgorithm(), digest);
+        SignatureValue remoteSignature = computeSignatureValueRemotely(messageDigest);
+
+        DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, remoteSignature);
+        signedDocument.save("remotepdf.pdf");
+    }
+
+    private CertificatesHolder queryUserCertificates()
+    {
+        //fixme: these are just dummy certificates - replace with real implementation
+        Certificate[] certs = new Certificate[10];
+        return certs;
     }
 
     public OnlineTSPSource getTspSource()
@@ -91,25 +104,6 @@ public class SignService
         onlineTSPSource.setDataLoader(new TimestampDataLoader());
 
         return onlineTSPSource;
-    }
-
-    public List<String> querySomeData() throws Exception
-    {
-        File file = ResourceUtils.getFile("penpdf.pdf");
-        DSSDocument document = new FileDocument(file);
-
-        SignatureImageParameters imageParameters = new SignatureImageParameters();
-        imageParameters.setImage(new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png")));
-        SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
-        imageParameters.setFieldParameters(fieldParameters);
-        fieldParameters.setOriginX(200);
-        fieldParameters.setOriginY(400);
-        fieldParameters.setWidth(300);
-        fieldParameters.setHeight(200);
-
-        DSSDocument newDoc = padesService.addNewSignatureField(document, fieldParameters);
-
-        return padesService.getAvailableSignatureFields(document);
     }
 
     private PAdESSignatureParameters initParameters()
@@ -137,8 +131,8 @@ public class SignService
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
         keyStore.load(Files.newInputStream(keyStoreFile.toPath()), "changeit".toCharArray());
 
-        String haha = keyStore.getCertificate("1").getPublicKey().toString();
-        System.out.println(haha);
+        String cert = keyStore.getCertificate("1").getPublicKey().toString();
+        System.out.println(cert);
 
         return keyStore.getProvider().toString();
     }
@@ -153,7 +147,8 @@ public class SignService
             List<DSSPrivateKeyEntry> keys = goodUserToken.getKeys();
             for (DSSPrivateKeyEntry entry : keys) {
                 loopCounter++;
-                System.out.println(entry.getCertificate().getCertificate());
+                System.out.println(entry.getClass());
+                //System.out.println(entry.getCertificate().getCertificate());
             }
 
 
@@ -163,53 +158,6 @@ public class SignService
             String buildUp = "CertificateEntryCount :" + loopCounter + " <br>" + "Signature value : " + Utils.toBase64(signatureValue.getValue());
             System.out.println("Signature value : " + Utils.toBase64(signatureValue.getValue()));
             return buildUp;
-        }
-    }
-
-    public void pen() throws Exception
-    {
-        File keyStoreFile  = ResourceUtils.getFile("classpath:localhost.p12");
-        File file = ResourceUtils.getFile("classpath:sample.pdf");
-        DSSDocument toSignDocument = new FileDocument(file);
-
-        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/localhost.p12", pp))
-        {
-            PAdESSignatureParameters signatureParameters = initParameters();
-
-            // Set the signing certificate and a certificate chain for the used token
-            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
-            signatureParameters.setSigningCertificate(privateKey.getCertificate());
-            signatureParameters.setCertificateChain(privateKey.getCertificateChain());
-
-            SignatureImageParameters imageParameters = new SignatureImageParameters();
-            // set an image
-            imageParameters.setImage(new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png")));
-
-            // initialize signature field parameters
-            SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
-            imageParameters.setFieldParameters(fieldParameters);
-            // the origin is the left and top corner of the page
-            fieldParameters.setOriginX(200);
-            fieldParameters.setOriginY(400);
-            fieldParameters.setWidth(300);
-            fieldParameters.setHeight(200);
-            signatureParameters.setImageParameters(imageParameters);
-
-            // Sign in three steps using the document obtained after the first signature
-            ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
-
-            System.out.println("Post getDataToSign: " + padesService.getAvailableSignatureFields(toSignDocument));
-
-            SignatureValue signatureValue = goodUserToken.sign(dataToSign, signatureParameters.getDigestAlgorithm(), privateKey);
-
-            System.out.println("Post goodUserToken.sign: " + padesService.getAvailableSignatureFields(toSignDocument));
-
-            DSSDocument doubleSignedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
-
-            System.out.println("Post SignDocument: " + padesService.getAvailableSignatureFields(toSignDocument));
-
-            doubleSignedDocument.save("penpdf.pdf");
         }
     }
 
@@ -223,6 +171,13 @@ public class SignService
         //System.out.println(timestampToken);
         //certificateVerifier.setAlertOnMissingRevocationData(null); // Désactive l'alerte
         //toSignDocument = padesService.timestamp(toSignDocument, new PAdESTimestampParameters(signatureParameters.getDigestAlgorithm()));
+
+        // Option 1
+        //ExternalCMSService externalCMSService = new ExternalCMSService(certificateVerifier);
+        //externalCMSService.signMessageDigest(messageDigest, params, remoteSignature);
+
+        // Option 2
+        //CmsService.signDocument(toSignDocument, params, cmsDoc);
     }
 
     public DSSDocument sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
@@ -258,196 +213,13 @@ public class SignService
         }
     }
 
-    public void doublepen() throws Exception
+    private SignatureValue computeSignatureValueRemotely(DSSMessageDigest messageDigest) throws Exception
     {
-        //File keyStoreFile = ResourceUtils.getFile("classpath:localhost.p12");
-        File file = ResourceUtils.getFile("classpath:sample.pdf");
-        DSSDocument toSignDocument = new FileDocument(file);
-
+        //TODO: replace that with the remote integration
         KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/localhost.p12", pp))
+        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/self-signed.p12", pp))
         {
-            PAdESSignatureParameters signatureParameters = initParameters();
-
-            // Set the signing certificate and a certificate chain for the used token
-            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
-            signatureParameters.setSigningCertificate(privateKey.getCertificate());
-            signatureParameters.setCertificateChain(privateKey.getCertificateChain());
-
-            SignatureImageParameters imageParameters = new SignatureImageParameters();
-            // set an image
-            imageParameters.setImage(new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png")));
-
-            // initialize signature field parameters
-            SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
-            imageParameters.setFieldParameters(fieldParameters);
-            // the origin is the left and top corner of the page
-            fieldParameters.setOriginX(200);
-            fieldParameters.setOriginY(400);
-            fieldParameters.setWidth(300);
-            fieldParameters.setHeight(200);
-            fieldParameters.setFieldId("some-field-id");
-            //signatureParameters.setImageParameters(imageParameters);
-
-            // Sign in three steps using the document obtained after the first signature
-            ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
-
-            System.out.println("Post getDataToSign: " + padesService.getAvailableSignatureFields(toSignDocument));
-
-            SignatureValue signatureValue = goodUserToken.sign(dataToSign, signatureParameters.getDigestAlgorithm(), privateKey);
-
-            System.out.println("Post goodUserToken.sign: " + padesService.getAvailableSignatureFields(toSignDocument));
-
-            DSSDocument doubleSignedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
-
-            System.out.println("Post SignDocument: " + padesService.getAvailableSignatureFields(toSignDocument));
-
-            doubleSignedDocument.save("penpdf.pdf");
-            toSignDocument = doubleSignedDocument;
+            return goodUserToken.signDigest(messageDigest, goodUserToken.getKeys().getFirst());
         }
-
-        // Try with toSignDocument before it gets
-        File newfile = ResourceUtils.getFile("penpdf.pdf");
-        DSSDocument dodoc = toSignDocument;//new FileDocument(newfile);
-
-        pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/localhost.p12", pp))
-        {
-            PAdESSignatureParameters signatureParameters = initParameters();
-
-            // Set the signing certificate and a certificate chain for the used token
-            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
-            signatureParameters.setSigningCertificate(privateKey.getCertificate());
-            signatureParameters.setCertificateChain(privateKey.getCertificateChain());
-
-            SignatureImageParameters imageParameters = new SignatureImageParameters();
-            // set an image
-            imageParameters.setImage(new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png")));
-
-            // initialize signature field parameters
-            SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
-            imageParameters.setFieldParameters(fieldParameters);
-            // the origin is the left and top corner of the page
-            fieldParameters.setOriginX(400);
-            fieldParameters.setOriginY(200);
-            fieldParameters.setWidth(100);
-            fieldParameters.setHeight(100);
-            //signatureParameters.setImageParameters(imageParameters);
-
-            // Sign in three steps using the document obtained after the first signature
-            ToBeSigned dataToSign = padesService.getDataToSign(dodoc, signatureParameters);
-
-            System.out.println("Post getDataToSign: " + padesService.getAvailableSignatureFields(dodoc));
-
-            SignatureValue signatureValue = goodUserToken.sign(dataToSign, signatureParameters.getDigestAlgorithm(), privateKey);
-
-            System.out.println("Post goodUserToken.sign: " + padesService.getAvailableSignatureFields(dodoc));
-
-            DSSDocument doubleSignedDocument = padesService.signDocument(dodoc, signatureParameters, signatureValue);
-
-            System.out.println("Post SignDocument: " + padesService.getAvailableSignatureFields(dodoc));
-
-            doubleSignedDocument.save("doublepenpdf.pdf");
-            toSignDocument = doubleSignedDocument;
-        }
-
-        dodoc = toSignDocument;//new FileDocument(newfile);
-
-        pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/localhost.p12", pp))
-        {
-            PAdESSignatureParameters signatureParameters = initParameters();
-
-            // Set the signing certificate and a certificate chain for the used token
-            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
-            signatureParameters.setSigningCertificate(privateKey.getCertificate());
-            signatureParameters.setCertificateChain(privateKey.getCertificateChain());
-
-            SignatureImageParameters imageParameters = new SignatureImageParameters();
-            // set an image
-            imageParameters.setImage(new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png")));
-
-            // initialize signature field parameters
-            SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
-            imageParameters.setFieldParameters(fieldParameters);
-            // the origin is the left and top corner of the page
-            fieldParameters.setOriginX(10);
-            fieldParameters.setOriginY(10);
-            fieldParameters.setWidth(10);
-            fieldParameters.setHeight(10);
-            //signatureParameters.setImageParameters(imageParameters);
-
-            // Sign in three steps using the document obtained after the first signature
-            ToBeSigned dataToSign = padesService.getDataToSign(dodoc, signatureParameters);
-
-            System.out.println("Post getDataToSign: " + padesService.getAvailableSignatureFields(dodoc));
-
-            SignatureValue signatureValue = goodUserToken.sign(dataToSign, signatureParameters.getDigestAlgorithm(), privateKey);
-
-            System.out.println("Post goodUserToken.sign: " + padesService.getAvailableSignatureFields(dodoc));
-
-            DSSDocument doubleSignedDocument = padesService.signDocument(dodoc, signatureParameters, signatureValue);
-
-            System.out.println("Post SignDocument: " + padesService.getAvailableSignatureFields(dodoc));
-
-            doubleSignedDocument.save("doublepenpdf.pdf");
-        }
-    }
-
-    public DSSDocument signExternal(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
-    {
-        PAdESSignatureParameters signatureParameters = initParameters();
-
-        // initialize signature field parameters
-        // the origin is the left and top corner of the page
-        if (fieldParameters.isPresent())
-        {
-            SignatureImageParameters imageParameters = new SignatureImageParameters();
-            imageParameters.setImage(signatureImage);
-            imageParameters.setFieldParameters(fieldParameters.get());
-            signatureParameters.setImageParameters(imageParameters);
-        }
-
-        signatureParameters.bLevel().setSigningDate(new Date());
-
-        try (InputStream in = new FileInputStream("self-signed.crt"))
-        {
-            CertificateFactory factory = CertificateFactory.getInstance("X.509");
-
-            X509Certificate x509Certificate =
-                    (X509Certificate) factory.generateCertificate(in);
-
-            CertificateToken certificateToken = new CertificateToken(x509Certificate);
-            signatureParameters.setSigningCertificate(certificateToken);
-        }
-        catch (Exception e)
-        {
-            System.err.println("Erreur lors du parsing du certificat X.509");
-            return toSignDocument;
-        }
-
-        ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
-
-        byte[] rawDigest = DSSUtils.digest(DigestAlgorithm.SHA256, dataToSign.getBytes());
-
-        DSSMessageDigest messageDigest = new DSSMessageDigest(DigestAlgorithm.SHA256, rawDigest);
-
-        System.out.println(messageDigest);
-
-        SignatureValue signatureValue = computeSignatureValueRemotely(messageDigest);
-        byte[] rawBytes = Files.readAllBytes(Path.of("document-signed.p7s"));
-
-        signatureValue.setAlgorithm(SignatureAlgorithm.RSA_SHA256);
-        signatureValue.setValue(rawBytes);
-
-        DSSDocument signedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
-        signedDocument.save("remotesignpdf.pdf");
-        return signedDocument;
-    }
-
-    private SignatureValue computeSignatureValueRemotely(DSSMessageDigest messageDigest)
-    {
-        SignatureValue signatureValue = new SignatureValue();
-        return signatureValue;
     }
 }

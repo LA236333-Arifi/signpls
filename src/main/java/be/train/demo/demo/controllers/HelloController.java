@@ -40,50 +40,6 @@ public class HelloController
         }
     }
 
-    @GetMapping("/pen")
-    ResponseEntity<String> pen()
-    {
-        try
-        {
-            signService.pen();
-            return ResponseEntity.ok("Pen saved !");
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
-    @GetMapping("/doublepen")
-    ResponseEntity<String> doublepen()
-    {
-        try
-        {
-            signService.doublepen();
-            return ResponseEntity.ok("Double Pen saved !");
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
-    @GetMapping("/external")
-    ResponseEntity<String> external()
-    {
-        try
-        {
-            File file = ResourceUtils.getFile("classpath:sample.pdf");
-            DSSDocument toSignDocument = new FileDocument(file);
-            signService.signExternal(toSignDocument, Optional.empty());
-            return ResponseEntity.ok("Double Pen saved !");
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
     @GetMapping("/sign")
     ResponseEntity<String> sign()
     {
@@ -109,6 +65,20 @@ public class HelloController
         }
 
         return ResponseEntity.ok("PDF Saved (new way) !");
+    }
+
+    @GetMapping("/client")
+    ResponseEntity<String> client()
+    {
+        try
+        {
+            signService.clientSidePadesForRemoteSigning();
+            return ResponseEntity.ok("Client side pades worked. Check logs");
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     @GetMapping("/doublesign")
@@ -144,7 +114,7 @@ public class HelloController
             throw new RuntimeException(e);
         }
 
-        return ResponseEntity.ok("PDF Saved (new way) !");
+        return ResponseEntity.ok("PDF Saved (double signature) !");
     }
 
     @GetMapping("/keystore")
@@ -154,19 +124,6 @@ public class HelloController
         {
             String s = signService.keystore();
             return ResponseEntity.ok(s);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
-    @GetMapping("/query")
-    public ResponseEntity<String> query()
-    {
-        try
-        {
-            return ResponseEntity.ok(signService.querySomeData().isEmpty() ? "Empty" : signService.querySomeData().getFirst());
         }
         catch (Exception e)
         {
