@@ -26,20 +26,6 @@ public class HelloController
     @Autowired
     SignService signService;
 
-    @GetMapping("/cook")
-    ResponseEntity<String> cook()
-    {
-        try
-        {
-            String s = signService.cook();
-            return ResponseEntity.ok(s);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
     @GetMapping("/sign")
     ResponseEntity<String> sign()
     {
@@ -115,19 +101,5 @@ public class HelloController
         }
 
         return ResponseEntity.ok("PDF Saved (double signature) !");
-    }
-
-    @GetMapping("/keystore")
-    ResponseEntity<String> keystore()
-    {
-        try
-        {
-            String s = signService.keystore();
-            return ResponseEntity.ok(s);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
     }
 }
