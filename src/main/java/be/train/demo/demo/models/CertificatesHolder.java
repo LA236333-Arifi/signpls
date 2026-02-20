@@ -5,15 +5,16 @@ import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @NoArgsConstructor
 @AllArgsConstructor
 public class CertificatesHolder
 {
-    @Getter
+    @Getter @Setter
     CertificateToken certificate;
 
-    @Getter
+    @Getter @Setter
     CertificateToken[] certificateChain;
 
     public boolean isValid()

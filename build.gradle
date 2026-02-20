@@ -56,3 +56,12 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+springBoot {
+	mainClass = 'be.train.demo.demo.DemoApplication'
+}
+
+tasks.named('bootJar') {
+	// Nom du JAR final
+	archiveFileName = 'demosignature.jar'
+}

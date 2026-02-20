@@ -41,6 +41,7 @@ import eu.europa.esig.dss.utils.Utils;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
+import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInfoGenerator;
 import org.bouncycastle.cms.SignerInformation;
@@ -50,6 +51,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 import org.springframework.util.ResourceUtils;
+import tools.jackson.core.ObjectReadContext;
 
 import javax.swing.text.Document;
 import java.io.*;
@@ -69,12 +71,28 @@ public class SignService
 {
     private final CertificateVerifier certificateVerifier = new CommonCertificateVerifier();
     private final PAdESService padesService = new PAdESService(certificateVerifier);
-    private final DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
+    //private final DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
     private final PdfBoxSignatureService pdfBoxSignatureService;
+    private final static String defaultCert = "self-signed.p12";
+    private final static String defaultPass = "changeit";
+    private static String FilenameCertificateP12 = defaultCert;
+    private static String PasswordCertificateP12 = defaultPass;
+
+    public void PushCertificateForDemo(String cert, String pass)
+    {
+        FilenameCertificateP12 = cert;
+        PasswordCertificateP12 = pass;
+    }
+
+    public void PopCertificateForDemo()
+    {
+        FilenameCertificateP12 = defaultCert;
+        PasswordCertificateP12 = defaultPass;
+    }
 
     public void clientSidePadesForRemoteSigning() throws Exception
     {
-        File file = ResourceUtils.getFile("classpath:sample.pdf");
+        File file = new File("sample.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
@@ -96,10 +114,19 @@ public class SignService
         signedDocument.save("remotepdf.pdf");
     }
 
-    private CertificatesHolder queryUserCertificates()
+    private CertificatesHolder queryUserCertificates() throws Exception
     {
         //fixme: these are just dummy certificates - replace with real implementation
         CertificatesHolder certificatesHolder = new CertificatesHolder();
+        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection(PasswordCertificateP12.toCharArray());
+        File p12File = new File(FilenameCertificateP12);
+        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken(p12File, pp))
+        {
+            // Set the signing certificate and a certificate chain for the used token
+            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
+            certificatesHolder.setCertificate(privateKey.getCertificate());
+            certificatesHolder.setCertificateChain(privateKey.getCertificateChain());
+        }
         return certificatesHolder;
     }
 
@@ -117,13 +144,13 @@ public class SignService
     {
         PAdESSignatureParameters signatureParameters = new PAdESSignatureParameters();
         signatureParameters.setAppName("MY SUPER DEMO APP");
-        //signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_B);
-        signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_T);
-        //signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_LT);
+        //signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_T);
+        signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_B);
         signatureParameters.setDigestAlgorithm(DigestAlgorithm.SHA256);
         signatureParameters.setReason("La raison est simple xyz");
         signatureParameters.setSignerName("Jean Claude");
         signatureParameters.setLocation("Belgium");
+        signatureParameters.setContentSize(15000);
 
         // Maybe add more bLevel attributes?
         signatureParameters.bLevel().setSigningDate(new Date());
@@ -144,8 +171,10 @@ public class SignService
 
     public DSSDocument sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
     {
-        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/self-signed.p12", pp))
+        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection(PasswordCertificateP12.toCharArray());
+        File p12File = new File(FilenameCertificateP12);
+        System.out.println("Cert: " + FilenameCertificateP12 + " | Pass : " + PasswordCertificateP12);
+        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken(p12File, pp))
         {
             PAdESSignatureParameters signatureParameters = initParameters();
 
@@ -154,17 +183,19 @@ public class SignService
             signatureParameters.setSigningCertificate(privateKey.getCertificate());
             signatureParameters.setCertificateChain(privateKey.getCertificateChain());
 
+            System.out.println("Bas64: " + Base64.getEncoder().encode(privateKey.getCertificate().getEncoded()));
+
             // initialize signature field parameters
             // the origin is the left and top corner of the page
-            if (fieldParameters.isPresent())
+            if (fieldParameters.isPresent() && false)
             {
                 SignatureImageParameters imageParameters = new SignatureImageParameters();
-                imageParameters.setImage(signatureImage);
+                //imageParameters.setImage(signatureImage);
                 imageParameters.setFieldParameters(fieldParameters.get());
                 signatureParameters.setImageParameters(imageParameters);
             }
 
-            padesService.setTspSource(getTspSource());
+            //padesService.setTspSource(getTspSource());
 
             // Only for pades baseline LT (QES only)
             //OnlineOCSPSource onlineOCSPSource = new OnlineOCSPSource();
@@ -183,10 +214,50 @@ public class SignService
     private SignatureValue computeSignatureValueRemotely(DSSMessageDigest messageDigest) throws Exception
     {
         //TODO: replace that with the remote integration
-        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection("changeit".toCharArray());
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken("src/main/resources/self-signed.p12", pp))
+        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection(PasswordCertificateP12.toCharArray());
+        File p12File = new File(FilenameCertificateP12);
+        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken(p12File, pp))
         {
             return goodUserToken.signDigest(messageDigest, goodUserToken.getKeys().getFirst());
         }
+    }
+
+    /**
+     * This method setups the data to sign and returns the digest to sign
+     * using the input certificate.
+     * Implementation for Web eID
+     * */
+    public Digest PrepareSignature(CertificateToken certificateToken)
+    {
+        File file = new File("sample.pdf");
+        DSSDocument toSignDocument = new FileDocument(file);
+
+        var params = initParameters();
+
+        params.setSigningCertificate(certificateToken);
+
+        ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
+        byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
+        return new Digest(params.getDigestAlgorithm(), digest);
+    }
+
+    /**
+     * This method signs the document by inserting the signature value in the CMS
+     * that is embedded in the document.
+     * Implementation for Web eID
+     * */
+    public boolean FinalizeSignature(SignatureValue signatureValue, SignatureAlgorithm signatureAlgorithm) throws Exception
+    {
+        File file = new File("sample.pdf");
+        DSSDocument toSignDocument = new FileDocument(file);
+
+        var params = initParameters();
+
+        // Make verifications to ensure the signature value is right
+
+        params.setDigestAlgorithm(signatureAlgorithm.getDigestAlgorithm());
+        DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
+        signedDocument.save("remotepdf.pdf");
+        return true;
     }
 }
