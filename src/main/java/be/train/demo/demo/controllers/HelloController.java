@@ -1,20 +1,28 @@
 package be.train.demo.demo.controllers;
 
+import be.train.demo.demo.dtos.CertificateDTO;
+import be.train.demo.demo.dtos.SignatureFinalizeRequestDTO;
 import be.train.demo.demo.services.SignService;
+import be.train.demo.demo.utils.SignatureAlgorithmMapper;
+import eu.europa.esig.dss.enumerations.DigestAlgorithm;
+import eu.europa.esig.dss.enumerations.EncryptionAlgorithm;
+import eu.europa.esig.dss.enumerations.SignatureAlgorithm;
 import eu.europa.esig.dss.model.DSSDocument;
 import eu.europa.esig.dss.model.FileDocument;
-import eu.europa.esig.dss.model.InMemoryDocument;
+import eu.europa.esig.dss.model.SignatureValue;
+import eu.europa.esig.dss.model.x509.CertificateToken;
 import eu.europa.esig.dss.pades.SignatureFieldParameters;
-import eu.europa.esig.dss.pades.SignatureImageParameters;
+import jakarta.validation.Valid;
+import org.apache.coyote.Response;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.ResourceUtils;
 import org.springframework.web.bind.annotation.*;
 
-import javax.swing.text.html.Option;
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
+import java.net.URI;
+import java.security.cert.X509Certificate;
+import java.util.Base64;
 import java.util.Optional;
 
 @RestController
@@ -100,6 +108,46 @@ public class HelloController
         finally
         {
             signService.PopCertificateForDemo();
+        }
+    }
+
+    @GetMapping("/signatures/prepare")
+    ResponseEntity<String> prepareSignature(@Valid @RequestBody CertificateDTO certificateDTO)
+    {
+        try
+        {
+            CertificateToken certificateToken = new CertificateToken(certificateDTO.toX509Certificate());
+            signService.PrepareSignature(certificateToken);
+            return ResponseEntity.ok("Signature prepared!");
+        }
+        catch (Exception e)
+        {
+            return ResponseEntity.badRequest().body("Certificat X509 invalide ou manquant.");
+        }
+    }
+
+    @PostMapping("/signatures/finalize")
+    ResponseEntity<String> finalizeSignature(@Valid @RequestBody SignatureFinalizeRequestDTO signatureRequest)
+    {
+        try
+        {
+            SignatureValue signature = new SignatureValue();
+            byte[] signatureBytes = Base64.getDecoder().decode(signatureRequest.getSignatureBase64());
+
+            EncryptionAlgorithm encryptionAlgorithm = EncryptionAlgorithm.valueOf(signatureRequest.getSignatureAlgorithmDTO().getCryptoAlgorithm());
+            DigestAlgorithm digestAlgorithm = DigestAlgorithm.valueOf(signatureRequest.getSignatureAlgorithmDTO().getHashFunction());
+            SignatureAlgorithm signatureAlgorithm = SignatureAlgorithmMapper.from(encryptionAlgorithm, digestAlgorithm);
+
+            signature.setValue(signatureBytes);
+            signature.setAlgorithm(signatureAlgorithm);
+
+            signService.FinalizeSignature(signature);
+
+            return ResponseEntity.ok("Signature Finalized!");
+        }
+        catch (Exception e)
+        {
+            return ResponseEntity.badRequest().body("La signature n'a pas été finalisée");
         }
     }
 

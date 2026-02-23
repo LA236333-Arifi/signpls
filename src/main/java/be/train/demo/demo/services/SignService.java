@@ -10,13 +10,11 @@ import eu.europa.esig.dss.enumerations.*;
 import eu.europa.esig.dss.model.*;
 import eu.europa.esig.dss.model.signature.SignaturePolicy;
 import eu.europa.esig.dss.model.x509.CertificateToken;
-import eu.europa.esig.dss.pades.PAdESSignatureParameters;
-import eu.europa.esig.dss.pades.PAdESTimestampParameters;
-import eu.europa.esig.dss.pades.SignatureFieldParameters;
-import eu.europa.esig.dss.pades.SignatureImageParameters;
+import eu.europa.esig.dss.pades.*;
 import eu.europa.esig.dss.pades.signature.ExternalCMSService;
 import eu.europa.esig.dss.pades.signature.PAdESService;
 import eu.europa.esig.dss.pades.signature.PAdESWithExternalCMSService;
+import eu.europa.esig.dss.pades.validation.PDFDocumentValidator;
 import eu.europa.esig.dss.pades.validation.timestamp.PdfTimestampToken;
 import eu.europa.esig.dss.pdf.PDFSignatureService;
 import eu.europa.esig.dss.pdf.PdfSignatureCache;
@@ -77,6 +75,7 @@ public class SignService
     private final static String defaultPass = "changeit";
     private static String FilenameCertificateP12 = defaultCert;
     private static String PasswordCertificateP12 = defaultPass;
+    private static CertificateToken currentCertificate;
 
     public void PushCertificateForDemo(String cert, String pass)
     {
@@ -227,17 +226,23 @@ public class SignService
      * using the input certificate.
      * Implementation for Web eID
      * */
-    public Digest PrepareSignature(CertificateToken certificateToken)
+    public Digest PrepareSignature(CertificateToken certificateToken) throws Exception
     {
         File file = new File("sample.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
-
         params.setSigningCertificate(certificateToken);
 
+        // Temp: cache the current certificate for the finalize step
+        currentCertificate = new CertificateToken(certificateToken.getCertificate());
+
         ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
+
         byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
+
+        // Save the current state of the document
+        toSignDocument.save("flow.pdf");
         return new Digest(params.getDigestAlgorithm(), digest);
     }
 
@@ -246,18 +251,26 @@ public class SignService
      * that is embedded in the document.
      * Implementation for Web eID
      * */
-    public boolean FinalizeSignature(SignatureValue signatureValue, SignatureAlgorithm signatureAlgorithm) throws Exception
+    public boolean FinalizeSignature(SignatureValue signatureValue) throws Exception
     {
-        File file = new File("sample.pdf");
+        File file = new File("flow.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
+        params.setSigningCertificate(currentCertificate);
 
         // Make verifications to ensure the signature value is right
+        // Quelles vérifs sont nécessaires ? La SignatureValue a été signée avec la clée privée
+        // donc faut surement vérifier la signature avec la clé publique ?
+        ValidateSignature(signatureValue);
 
-        params.setDigestAlgorithm(signatureAlgorithm.getDigestAlgorithm());
+        params.setDigestAlgorithm(signatureValue.getAlgorithm().getDigestAlgorithm());
         DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
-        signedDocument.save("remotepdf.pdf");
+        signedDocument.save("finalizedflow.pdf");
         return true;
+    }
+
+    public void ValidateSignature(SignatureValue signatureValue)
+    {
     }
 }
