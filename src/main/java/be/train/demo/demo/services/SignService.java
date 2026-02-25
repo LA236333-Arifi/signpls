@@ -25,6 +25,7 @@ import eu.europa.esig.dss.service.http.commons.OCSPDataLoader;
 import eu.europa.esig.dss.service.http.commons.TimestampDataLoader;
 import eu.europa.esig.dss.service.ocsp.OnlineOCSPSource;
 import eu.europa.esig.dss.service.tsp.OnlineTSPSource;
+import eu.europa.esig.dss.spi.DSSASN1Utils;
 import eu.europa.esig.dss.spi.DSSUtils;
 import eu.europa.esig.dss.spi.validation.CertificateVerifier;
 import eu.europa.esig.dss.spi.validation.CommonCertificateVerifier;
@@ -40,6 +41,7 @@ import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
+import org.apache.pdfbox.util.Hex;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInfoGenerator;
 import org.bouncycastle.cms.SignerInformation;
@@ -51,6 +53,7 @@ import org.springframework.util.MimeType;
 import org.springframework.util.ResourceUtils;
 import tools.jackson.core.ObjectReadContext;
 
+import javax.swing.text.DefaultEditorKit;
 import javax.swing.text.Document;
 import java.io.*;
 import java.nio.file.Files;
@@ -76,6 +79,7 @@ public class SignService
     private static String FilenameCertificateP12 = defaultCert;
     private static String PasswordCertificateP12 = defaultPass;
     private static CertificateToken currentCertificate;
+    private static PdfSignatureCache currentSignatureCache;
 
     public void PushCertificateForDemo(String cert, String pass)
     {
@@ -139,21 +143,31 @@ public class SignService
         return onlineTSPSource;
     }
 
+    public SignatureLevel getDefaultSignatureLevel()
+    {
+        //return SignatureLevel.PAdES_BASELINE_T;
+        return SignatureLevel.PAdES_BASELINE_B;
+    }
+
+    public DigestAlgorithm getDefaultDigestAlgorithm()
+    {
+        return DigestAlgorithm.SHA256;
+    }
+
     private PAdESSignatureParameters initParameters()
     {
         PAdESSignatureParameters signatureParameters = new PAdESSignatureParameters();
         signatureParameters.setAppName("MY SUPER DEMO APP");
-        //signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_T);
-        signatureParameters.setSignatureLevel(SignatureLevel.PAdES_BASELINE_B);
-        signatureParameters.setDigestAlgorithm(DigestAlgorithm.SHA256);
+        signatureParameters.setSignatureLevel(getDefaultSignatureLevel());
+        signatureParameters.setDigestAlgorithm(getDefaultDigestAlgorithm());
         signatureParameters.setReason("La raison est simple xyz");
         signatureParameters.setSignerName("Jean Claude");
         signatureParameters.setLocation("Belgium");
         signatureParameters.setContentSize(15000);
 
-        // Maybe add more bLevel attributes?
-        signatureParameters.bLevel().setSigningDate(new Date());
-
+        // Add those additional bLevel parameters for Itsme
+        //signatureParameters.bLevel().setSignaturePolicy();
+        //signatureParameters.bLevel().setCommitmentTypeIndications();
         return signatureParameters;
     }
 
@@ -233,16 +247,15 @@ public class SignService
 
         var params = initParameters();
         params.setSigningCertificate(certificateToken);
-
-        // Temp: cache the current certificate for the finalize step
-        currentCertificate = new CertificateToken(certificateToken.getCertificate());
+        currentSignatureCache = params.getPdfSignatureCache();
+        currentCertificate = certificateToken;
 
         ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
 
         byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
 
-        // Save the current state of the document
         toSignDocument.save("flow.pdf");
+
         return new Digest(params.getDigestAlgorithm(), digest);
     }
 
@@ -251,26 +264,22 @@ public class SignService
      * that is embedded in the document.
      * Implementation for Web eID
      * */
-    public boolean FinalizeSignature(SignatureValue signatureValue) throws Exception
+    public void FinalizeSignature(SignatureValue signatureValue) throws Exception
     {
         File file = new File("flow.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
         params.setSigningCertificate(currentCertificate);
+        params.getContext().setPdfToBeSignedCache(currentSignatureCache);
 
-        // Make verifications to ensure the signature value is right
-        // Quelles vérifs sont nécessaires ? La SignatureValue a été signée avec la clée privée
-        // donc faut surement vérifier la signature avec la clé publique ?
-        ValidateSignature(signatureValue);
-
-        params.setDigestAlgorithm(signatureValue.getAlgorithm().getDigestAlgorithm());
         DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
         signedDocument.save("finalizedflow.pdf");
-        return true;
     }
 
-    public void ValidateSignature(SignatureValue signatureValue)
+    public void ValidateSignature(SignatureValue signatureValue, PAdESSignatureParameters params)
     {
+        // Quelles vérifs sont nécessaires ? La SignatureValue a été signée avec la clée privée
+        // donc faut surement vérifier la signature avec la clé publique ?
     }
 }
