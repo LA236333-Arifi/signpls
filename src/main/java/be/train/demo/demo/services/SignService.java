@@ -247,6 +247,9 @@ public class SignService
 
         var params = initParameters();
         params.setSigningCertificate(certificateToken);
+
+        // Le cache est primordial à stocker car il va contenir le document préparé
+        // ainsi que son hash. Sans ça, la signature est invalide.
         currentSignatureCache = params.getPdfSignatureCache();
         currentCertificate = certificateToken;
 
