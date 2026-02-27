@@ -6,6 +6,8 @@ import eu.europa.esig.dss.cades.signature.CMSBuilder;
 import eu.europa.esig.dss.cms.CMS;
 import eu.europa.esig.dss.cms.CMSSignedDocument;
 import eu.europa.esig.dss.cms.CMSUtils;
+import eu.europa.esig.dss.detailedreport.DetailedReport;
+import eu.europa.esig.dss.diagnostic.DiagnosticData;
 import eu.europa.esig.dss.enumerations.*;
 import eu.europa.esig.dss.model.*;
 import eu.europa.esig.dss.model.signature.SignaturePolicy;
@@ -25,10 +27,15 @@ import eu.europa.esig.dss.service.http.commons.OCSPDataLoader;
 import eu.europa.esig.dss.service.http.commons.TimestampDataLoader;
 import eu.europa.esig.dss.service.ocsp.OnlineOCSPSource;
 import eu.europa.esig.dss.service.tsp.OnlineTSPSource;
+import eu.europa.esig.dss.signature.SignatureValueChecker;
+import eu.europa.esig.dss.simplecertificatereport.SimpleCertificateReport;
 import eu.europa.esig.dss.spi.DSSASN1Utils;
+import eu.europa.esig.dss.spi.DSSPKUtils;
+import eu.europa.esig.dss.spi.DSSSecurityProvider;
 import eu.europa.esig.dss.spi.DSSUtils;
 import eu.europa.esig.dss.spi.validation.CertificateVerifier;
 import eu.europa.esig.dss.spi.validation.CommonCertificateVerifier;
+import eu.europa.esig.dss.spi.validation.SignatureValidationContext;
 import eu.europa.esig.dss.spi.x509.revocation.crl.CRLToken;
 import eu.europa.esig.dss.spi.x509.revocation.ocsp.OCSPCertificateSource;
 import eu.europa.esig.dss.spi.x509.revocation.ocsp.OCSPToken;
@@ -37,6 +44,8 @@ import eu.europa.esig.dss.spi.x509.tsp.TSPSource;
 import eu.europa.esig.dss.spi.x509.tsp.TimestampToken;
 import eu.europa.esig.dss.token.*;
 import eu.europa.esig.dss.utils.Utils;
+import eu.europa.esig.dss.validation.CertificateValidator;
+import eu.europa.esig.dss.validation.reports.CertificateReports;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
@@ -47,6 +56,7 @@ import org.bouncycastle.cms.SignerInfoGenerator;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.operator.DigestCalculatorProvider;
 import org.bouncycastle.tsp.TSPUtil;
+import org.hibernate.validator.internal.constraintvalidators.hv.ISBNValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
@@ -58,9 +68,7 @@ import javax.swing.text.Document;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyStore;
-import java.security.PrivateKey;
-import java.security.Signature;
+import java.security.*;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -240,7 +248,7 @@ public class SignService
      * using the input certificate.
      * Implementation for Web eID
      * */
-    public Digest PrepareSignature(CertificateToken certificateToken) throws Exception
+    public Digest prepareSignature(CertificateToken certificateToken) throws Exception
     {
         File file = new File("sample.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
@@ -267,7 +275,7 @@ public class SignService
      * that is embedded in the document.
      * Implementation for Web eID
      * */
-    public void FinalizeSignature(SignatureValue signatureValue) throws Exception
+    public void finalizeSignature(SignatureValue signatureValue) throws Exception
     {
         File file = new File("flow.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
@@ -276,13 +284,33 @@ public class SignService
         params.setSigningCertificate(currentCertificate);
         params.getContext().setPdfToBeSignedCache(currentSignatureCache);
 
+        DSSMessageDigest messageDigest = params.getPdfSignatureCache().getMessageDigest();
+        CertificateToken certificateToken = params.getSigningCertificate();
+        if (!validateSignature(messageDigest, signatureValue, certificateToken))
+        {
+            throw new SignatureException("Signature value is wrong");
+        }
+
         DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
         signedDocument.save("finalizedflow.pdf");
     }
 
-    public void ValidateSignature(SignatureValue signatureValue, PAdESSignatureParameters params)
+
+    public boolean validateSignature(DSSMessageDigest digest, SignatureValue signatureValue, CertificateToken signingCertificate)
     {
-        // Quelles vérifs sont nécessaires ? La SignatureValue a été signée avec la clée privée
-        // donc faut surement vérifier la signature avec la clé publique ?
+        // La SignatureValue a été signée par la clée privée, il faut au moins vérifier la
+        // signature avec la clé publique correspondante. D'autres vérifications post-signature
+        // pourraient avoir lieu pour vérifier les certificats, etc.
+        try
+        {
+            Signature signature = Signature.getInstance(signatureValue.getAlgorithm().getJCEId(), DSSSecurityProvider.getSecurityProviderName());
+            signature.initVerify(signingCertificate.getPublicKey());
+            signature.update(digest.getValue());
+            return signature.verify(signatureValue.getValue());
+        }
+        catch (Exception e)
+        {
+            return false;
+        }
     }
 }

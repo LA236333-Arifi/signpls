@@ -125,7 +125,7 @@ public class HelloController
             System.out.println(gg);
             SignaturePreparationDTO signaturePreparationDTO = new SignaturePreparationDTO();
 
-            Digest digest = signService.PrepareSignature(certificateToken);
+            Digest digest = signService.prepareSignature(certificateToken);
             String digestAlgorithm = SignatureAlgorithmMapper.getDigestAlgorithm(signService.getDefaultDigestAlgorithm());
 
             signaturePreparationDTO.setHashValue(digest.getBase64Value());
@@ -158,7 +158,7 @@ public class HelloController
             signature.setValue(signatureBytes);
             signature.setAlgorithm(signatureAlgorithm);
 
-            signService.FinalizeSignature(signature);
+            signService.finalizeSignature(signature);
 
             return ResponseEntity.ok(new SignatureFinalizeResponseDTO("Signature Finalized!", true));
         }
