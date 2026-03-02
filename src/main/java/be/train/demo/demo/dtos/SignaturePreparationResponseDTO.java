@@ -9,7 +9,7 @@ import lombok.Setter;
 
 @NoArgsConstructor
 @AllArgsConstructor
-public class SignaturePreparationDTO
+public class SignaturePreparationResponseDTO
 {
     @Getter @Setter @NotBlank
     @JsonProperty("hash")

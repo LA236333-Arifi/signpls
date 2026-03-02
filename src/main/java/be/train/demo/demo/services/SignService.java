@@ -10,6 +10,7 @@ import eu.europa.esig.dss.detailedreport.DetailedReport;
 import eu.europa.esig.dss.diagnostic.DiagnosticData;
 import eu.europa.esig.dss.enumerations.*;
 import eu.europa.esig.dss.model.*;
+import eu.europa.esig.dss.model.Policy;
 import eu.europa.esig.dss.model.signature.SignaturePolicy;
 import eu.europa.esig.dss.model.x509.CertificateToken;
 import eu.europa.esig.dss.pades.*;
@@ -45,6 +46,7 @@ import eu.europa.esig.dss.spi.x509.tsp.TimestampToken;
 import eu.europa.esig.dss.token.*;
 import eu.europa.esig.dss.utils.Utils;
 import eu.europa.esig.dss.validation.CertificateValidator;
+import eu.europa.esig.dss.validation.process.CertificatePolicyIdentifiers;
 import eu.europa.esig.dss.validation.reports.CertificateReports;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
@@ -80,7 +82,7 @@ public class SignService
 {
     private final CertificateVerifier certificateVerifier = new CommonCertificateVerifier();
     private final PAdESService padesService = new PAdESService(certificateVerifier);
-    //private final DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
+    private final DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
     private final PdfBoxSignatureService pdfBoxSignatureService;
     private final static String defaultCert = "self-signed.p12";
     private final static String defaultPass = "changeit";
@@ -179,6 +181,28 @@ public class SignService
         return signatureParameters;
     }
 
+    private void addSignaturePolicy()
+    {
+        var params = initParameters();
+
+        List<CommitmentType> commitmentTypeIndications = new ArrayList<>();
+        //commitmentTypeIndications.add(CommitmentTypeEnum.ProofOfOrigin);
+        commitmentTypeIndications.add(CommitmentTypeEnum.ProofOfApproval);
+        Policy policy = new Policy();
+        policy.setDescription("COMPL_POL_GenericQualfiedSignatureCreationPolicy");
+        policy.setId("1.3.6.1.4.1.49274.1.1.7.2.0");
+        policy.setDocumentationReferences("https://testing.itsme-id.com/hubfs/Legal%20Information%20-%20B2B%20Website/Sign%20Document%20Repository/Generic%20Qualified%20Signature%20Policy/compl_pol_genericqualifiedsignaturepolicy-2-0.pdf");
+
+        params.bLevel().setSignaturePolicy(policy);
+        params.bLevel().setCommitmentTypeIndications(commitmentTypeIndications);
+        params.bLevel().setClaimedSignerRoles(List.of("Chef"));
+    }
+
+    private void getItsmeCommmitmentForTesting()
+    {
+
+    }
+
     public CertificateToken getTokenFromJson(JsonObject jsonObject) throws Exception
     {
         String certBase64 = jsonObject.getAsString();
@@ -265,7 +289,9 @@ public class SignService
 
         byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
 
-        toSignDocument.save("flow.pdf");
+        // On a surement pas besoin de faire ça car le pdf ouvert n'a pas changé. C'est le cache
+        // qui possède le document avec le /Contents alloué
+        //toSignDocument.save("flow.pdf");
 
         return new Digest(params.getDigestAlgorithm(), digest);
     }
@@ -277,19 +303,28 @@ public class SignService
      * */
     public void finalizeSignature(SignatureValue signatureValue) throws Exception
     {
-        File file = new File("flow.pdf");
+        // C'était ouvert avec flow auparavant. Il est possible que ce soit la cause du bug
+        // du message digest qui était différent car il aurait un deterministic id différent?
+        File file = new File("sample.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
         params.setSigningCertificate(currentCertificate);
+
+        // Il faut tester sans ce bout de code si ca fonctionne. Meme si ca fonctionne, il est
+        // probable qu'on veuille tout de meme stocker le SignatureCache en DB (au moins le
+        // message digest) pour des questions de performance.
+        /*
         params.getContext().setPdfToBeSignedCache(currentSignatureCache);
 
         DSSMessageDigest messageDigest = params.getPdfSignatureCache().getMessageDigest();
         CertificateToken certificateToken = params.getSigningCertificate();
+
         if (!validateSignature(messageDigest, signatureValue, certificateToken))
         {
             throw new SignatureException("Signature value is wrong");
         }
+        */
 
         DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
         signedDocument.save("finalizedflow.pdf");

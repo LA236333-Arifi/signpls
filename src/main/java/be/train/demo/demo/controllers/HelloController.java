@@ -3,8 +3,6 @@ package be.train.demo.demo.controllers;
 import be.train.demo.demo.dtos.*;
 import be.train.demo.demo.services.SignService;
 import be.train.demo.demo.utils.SignatureAlgorithmMapper;
-import eu.europa.esig.dss.enumerations.DigestAlgorithm;
-import eu.europa.esig.dss.enumerations.EncryptionAlgorithm;
 import eu.europa.esig.dss.enumerations.SignatureAlgorithm;
 import eu.europa.esig.dss.model.DSSDocument;
 import eu.europa.esig.dss.model.Digest;
@@ -13,21 +11,14 @@ import eu.europa.esig.dss.model.SignatureValue;
 import eu.europa.esig.dss.model.x509.CertificateToken;
 import eu.europa.esig.dss.pades.SignatureFieldParameters;
 import jakarta.validation.Valid;
-import org.apache.coyote.Response;
 import org.apache.pdfbox.util.Hex;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.security.cert.X509Certificate;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.Optional;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 @RestController
 public class HelloController
@@ -116,26 +107,26 @@ public class HelloController
     }
 
     @PostMapping("/signatures/prepare")
-    ResponseEntity<SignaturePreparationDTO> prepareSignature(@Valid @RequestBody CertificateDTO certificateDTO)
+    ResponseEntity<SignaturePreparationResponseDTO> prepareSignature(@Valid @RequestBody CertificateDTO certificateDTO)
     {
         try
         {
             CertificateToken certificateToken = new CertificateToken(certificateDTO.toX509Certificate());
             var gg = certificateToken.getPublicKey();
             System.out.println(gg);
-            SignaturePreparationDTO signaturePreparationDTO = new SignaturePreparationDTO();
+            SignaturePreparationResponseDTO signaturePreparationResponseDTO = new SignaturePreparationResponseDTO();
 
             Digest digest = signService.prepareSignature(certificateToken);
             String digestAlgorithm = SignatureAlgorithmMapper.getDigestAlgorithm(signService.getDefaultDigestAlgorithm());
 
-            signaturePreparationDTO.setHashValue(digest.getBase64Value());
-            signaturePreparationDTO.setHashFunction(digestAlgorithm);
+            signaturePreparationResponseDTO.setHashValue(digest.getBase64Value());
+            signaturePreparationResponseDTO.setHashFunction(digestAlgorithm);
 
-            return ResponseEntity.ok(signaturePreparationDTO);
+            return ResponseEntity.ok(signaturePreparationResponseDTO);
         }
         catch (Exception e)
         {
-            return ResponseEntity.badRequest().body(new SignaturePreparationDTO());
+            return ResponseEntity.badRequest().body(new SignaturePreparationResponseDTO());
         }
     }
 
