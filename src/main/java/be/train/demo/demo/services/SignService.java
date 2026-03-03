@@ -297,9 +297,12 @@ public class SignService
         Digest messageDigest = new Digest(params.getDigestAlgorithm(), digest);
         currentMessageDigest = messageDigest;
 
+        String certificateBytesBase64 = Base64.getEncoder().encodeToString(certificateToken.getCertificate().getEncoded());
+
         signatureRequest.setSigningDate(params.getSigningDate());
         signatureRequest.setDataToSignDigest(messageDigest);
-        //signatureRequest.setCertificateBase64(certificateToken.getCertificate());
+        signatureRequest.setCertificateBase64(certificateBytesBase64);
+        // Save the signatureRequest in the DB
 
         return messageDigest;
     }
