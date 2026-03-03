@@ -1,6 +1,8 @@
 package be.train.demo.demo.services;
 
 import be.train.demo.demo.models.CertificatesHolder;
+import be.train.demo.demo.models.SignatureRequest;
+import be.train.demo.demo.utils.SignatureAlgorithmMapper;
 import com.nimbusds.jose.shaded.gson.JsonObject;
 import eu.europa.esig.dss.cades.signature.CMSBuilder;
 import eu.europa.esig.dss.cms.CMS;
@@ -82,7 +84,7 @@ public class SignService
 {
     private final CertificateVerifier certificateVerifier = new CommonCertificateVerifier();
     private final PAdESService padesService = new PAdESService(certificateVerifier);
-    private final DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
+    //private final static DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
     private final PdfBoxSignatureService pdfBoxSignatureService;
     private final static String defaultCert = "self-signed.p12";
     private final static String defaultPass = "changeit";
@@ -90,6 +92,8 @@ public class SignService
     private static String PasswordCertificateP12 = defaultPass;
     private static CertificateToken currentCertificate;
     private static PdfSignatureCache currentSignatureCache;
+    private static Date currentDate;
+    private static Digest currentMessageDigest;
 
     public void PushCertificateForDemo(String cert, String pass)
     {
@@ -277,23 +281,27 @@ public class SignService
         File file = new File("sample.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
 
+        SignatureRequest signatureRequest = new SignatureRequest();
+
         var params = initParameters();
         params.setSigningCertificate(certificateToken);
 
         // Le cache est primordial à stocker car il va contenir le document préparé
         // ainsi que son hash. Sans ça, la signature est invalide.
-        currentSignatureCache = params.getPdfSignatureCache();
         currentCertificate = certificateToken;
+        currentDate = params.getSigningDate();
 
         ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
 
         byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
+        Digest messageDigest = new Digest(params.getDigestAlgorithm(), digest);
+        currentMessageDigest = messageDigest;
 
-        // On a surement pas besoin de faire ça car le pdf ouvert n'a pas changé. C'est le cache
-        // qui possède le document avec le /Contents alloué
-        //toSignDocument.save("flow.pdf");
+        signatureRequest.setSigningDate(params.getSigningDate());
+        signatureRequest.setDataToSignDigest(messageDigest);
+        //signatureRequest.setCertificateBase64(certificateToken.getCertificate());
 
-        return new Digest(params.getDigestAlgorithm(), digest);
+        return messageDigest;
     }
 
     /**
@@ -303,48 +311,56 @@ public class SignService
      * */
     public void finalizeSignature(SignatureValue signatureValue) throws Exception
     {
-        // C'était ouvert avec flow auparavant. Il est possible que ce soit la cause du bug
-        // du message digest qui était différent car il aurait un deterministic id différent?
         File file = new File("sample.pdf");
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
         params.setSigningCertificate(currentCertificate);
+        params.bLevel().setSigningDate(currentDate);
 
-        // Il faut tester sans ce bout de code si ca fonctionne. Meme si ca fonctionne, il est
-        // probable qu'on veuille tout de meme stocker le SignatureCache en DB (au moins le
-        // message digest) pour des questions de performance.
-        /*
-        params.getContext().setPdfToBeSignedCache(currentSignatureCache);
-
-        DSSMessageDigest messageDigest = params.getPdfSignatureCache().getMessageDigest();
+        Digest messageDigest = currentMessageDigest;
         CertificateToken certificateToken = params.getSigningCertificate();
+        SignatureAlgorithm signatureAlgorithm = params.getSignatureAlgorithm();
 
-        if (!validateSignature(messageDigest, signatureValue, certificateToken))
+        if (!validateSignature(messageDigest, signatureValue, certificateToken, signatureAlgorithm))
         {
             throw new SignatureException("Signature value is wrong");
         }
-        */
 
         DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
         signedDocument.save("finalizedflow.pdf");
     }
 
 
-    public boolean validateSignature(DSSMessageDigest digest, SignatureValue signatureValue, CertificateToken signingCertificate)
+    public boolean validateSignature(Digest digest, SignatureValue givenSignature, CertificateToken signingCertificate, SignatureAlgorithm expectedSignatureAlgorithm)
     {
         // La SignatureValue a été signée par la clée privée, il faut au moins vérifier la
         // signature avec la clé publique correspondante. D'autres vérifications post-signature
         // pourraient avoir lieu pour vérifier les certificats, etc.
         try
         {
+            SignatureValue signatureValue = new SignatureValue();
+            signatureValue.setValue(givenSignature.getValue());
+            signatureValue.setAlgorithm(givenSignature.getAlgorithm());
+
+            SignatureValueChecker signatureValueChecker = new SignatureValueChecker();
+            signatureValue = signatureValueChecker.ensureSignatureValue(signatureValue, expectedSignatureAlgorithm);
+
+            SignatureAlgorithm signatureAlgorithm = SignatureAlgorithmMapper.from(signatureValue.getAlgorithm().getEncryptionAlgorithm(), null);
+            signatureValue.setAlgorithm(signatureAlgorithm);
+
             Signature signature = Signature.getInstance(signatureValue.getAlgorithm().getJCEId(), DSSSecurityProvider.getSecurityProviderName());
+            System.out.println("Signature Algorithm: " + signatureValue.getAlgorithm().getJCEId());
+            System.out.println("Public Key infomration: " + signingCertificate.getPublicKey());
             signature.initVerify(signingCertificate.getPublicKey());
             signature.update(digest.getValue());
-            return signature.verify(signatureValue.getValue());
+            boolean debugVerify = signature.verify(signatureValue.getValue());
+            System.out.println("signature.verifiy value: " + debugVerify);
+            return debugVerify;
         }
         catch (Exception e)
         {
+            System.out.println(e.getMessage());
             return false;
         }
     }

@@ -11,7 +11,6 @@ import eu.europa.esig.dss.model.SignatureValue;
 import eu.europa.esig.dss.model.x509.CertificateToken;
 import eu.europa.esig.dss.pades.SignatureFieldParameters;
 import jakarta.validation.Valid;
-import org.apache.pdfbox.util.Hex;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,42 +19,11 @@ import java.io.File;
 import java.util.Base64;
 import java.util.Optional;
 
-@RestController
+@RestController("/java/")
 public class HelloController
 {
     @Autowired
     SignService signService;
-
-    @GetMapping("signature/{p12name}/{p12pass}")
-    ResponseEntity<String> signature(@PathVariable String p12name, @PathVariable String p12pass)
-    {
-        try
-        {
-            signService.PushCertificateForDemo(p12name, p12pass);
-            // initialize signature field parameters
-            SignatureFieldParameters fieldParameters = new SignatureFieldParameters();
-            // the origin is the left and top corner of the page
-            fieldParameters.setOriginX(10);
-            fieldParameters.setOriginY(10);
-            fieldParameters.setWidth(50);
-            fieldParameters.setHeight(50);
-
-            //File file = ResourceUtils.getFile("classpath:sample.pdf");
-            File file = new File("sample.pdf");
-            DSSDocument toSignDocument = new FileDocument(file);
-            DSSDocument dssDocument = signService.sign(toSignDocument, Optional.of(fieldParameters));
-        }
-        catch (Exception e)
-        {
-            return ResponseEntity.ok(e.toString() + "<br>\nLe nom du certificat et/ou le mot de passe sont incorrects. Le certificat doit aussi se trouver dans le meme dossier que l'executable java");
-        }
-        finally
-        {
-            signService.PopCertificateForDemo();
-        }
-
-        return ResponseEntity.ok("PDF signé avec succès!");
-    }
 
     @GetMapping("/sign")
     ResponseEntity<String> sign()
@@ -106,14 +74,13 @@ public class HelloController
         }
     }
 
-    @PostMapping("/signatures/prepare")
-    ResponseEntity<SignaturePreparationResponseDTO> prepareSignature(@Valid @RequestBody CertificateDTO certificateDTO)
+    @PostMapping("/signatures/eid/prepare")
+    ResponseEntity<SignaturePreparationResponseDTO> prepareSignature(@Valid @RequestBody SignaturePreparationRequestDTO signaturePrepareRequest)
     {
         try
         {
-            CertificateToken certificateToken = new CertificateToken(certificateDTO.toX509Certificate());
-            var gg = certificateToken.getPublicKey();
-            System.out.println(gg);
+            CertificateDER certificateDer = new CertificateDER(signaturePrepareRequest.getCertificateBase64());
+            CertificateToken certificateToken = new CertificateToken(certificateDer.convertToX509Certificate());
             SignaturePreparationResponseDTO signaturePreparationResponseDTO = new SignaturePreparationResponseDTO();
 
             Digest digest = signService.prepareSignature(certificateToken);
@@ -130,7 +97,7 @@ public class HelloController
         }
     }
 
-    @PostMapping("/signatures/finalize")
+    @PostMapping("/signatures/eid/finalize")
     ResponseEntity<SignatureFinalizeResponseDTO> finalizeSignature(@Valid @RequestBody SignatureFinalizeRequestDTO signatureRequest)
     {
         try
@@ -138,14 +105,9 @@ public class HelloController
             SignatureValue signature = new SignatureValue();
             byte[] signatureBytes = Base64.getDecoder().decode(signatureRequest.getSignatureBase64());
 
-            System.out.println("Encoded bytes: " + signatureRequest.getSignatureBase64());
-            System.out.println("Signature byte length: " + signatureBytes.length);
-            System.out.println("Contents of the decoded base64: "+ Hex.getString(signatureBytes));
-
             SignatureAlgorithmDTO signatureAlgorithmDTO = signatureRequest.getSignatureAlgorithmDTO();
             SignatureAlgorithm signatureAlgorithm = SignatureAlgorithmMapper.from(signatureAlgorithmDTO.getCryptoAlgorithm(), signatureAlgorithmDTO.getHashFunction());
 
-            System.out.println("L'algorithme de signature : " + signatureAlgorithm);
             signature.setValue(signatureBytes);
             signature.setAlgorithm(signatureAlgorithm);
 
@@ -158,6 +120,12 @@ public class HelloController
             System.out.println(e.getMessage());
             return ResponseEntity.badRequest().body(new SignatureFinalizeResponseDTO("La signature n'a pas été finalisée", false));
         }
+    }
+
+    @PostMapping("/signatures/itsme")
+    ResponseEntity<String> prep()
+    {
+        return ResponseEntity.ok("gg");
     }
 
     @GetMapping("/doublesign")
