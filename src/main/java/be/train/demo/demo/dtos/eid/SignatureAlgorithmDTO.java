@@ -1,16 +1,11 @@
-package be.train.demo.demo.dtos;
+package be.train.demo.demo.dtos.eid;
 
 import be.train.demo.demo.utils.SignatureAlgorithmMapper;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import eu.europa.esig.dss.enumerations.DigestAlgorithm;
-import eu.europa.esig.dss.enumerations.EncryptionAlgorithm;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
-
-import java.util.*;
 
 @Data
 @AllArgsConstructor

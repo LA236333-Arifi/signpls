@@ -1,4 +1,4 @@
-package be.train.demo.demo.dtos;
+package be.train.demo.demo.dtos.eid;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;

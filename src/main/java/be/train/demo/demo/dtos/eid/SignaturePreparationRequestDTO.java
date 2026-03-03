@@ -1,4 +1,4 @@
-package be.train.demo.demo.dtos;
+package be.train.demo.demo.dtos.eid;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;

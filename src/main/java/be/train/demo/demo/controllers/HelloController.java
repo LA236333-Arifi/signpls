@@ -1,6 +1,7 @@
 package be.train.demo.demo.controllers;
 
-import be.train.demo.demo.dtos.*;
+import be.train.demo.demo.common.CertificateDER;
+import be.train.demo.demo.dtos.eid.*;
 import be.train.demo.demo.services.SignService;
 import be.train.demo.demo.utils.SignatureAlgorithmMapper;
 import eu.europa.esig.dss.enumerations.SignatureAlgorithm;

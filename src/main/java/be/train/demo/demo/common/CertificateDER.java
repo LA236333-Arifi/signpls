@@ -1,5 +1,6 @@
-package be.train.demo.demo.dtos;
+package be.train.demo.demo.common;
 
+import be.train.demo.demo.interfaces.ICertificateConverter;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -15,7 +16,7 @@ import java.util.Base64;
 
 @AllArgsConstructor
 @NoArgsConstructor
-public class CertificateDER extends GenericCertificate
+public class CertificateDER implements ICertificateConverter
 {
     @Getter @Setter @NotBlank
     private String certificateBase64;
