@@ -15,6 +15,7 @@ import eu.europa.esig.dss.model.*;
 import eu.europa.esig.dss.model.Policy;
 import eu.europa.esig.dss.model.signature.SignaturePolicy;
 import eu.europa.esig.dss.model.x509.CertificateToken;
+import eu.europa.esig.dss.model.x509.extension.PolicyConstraints;
 import eu.europa.esig.dss.pades.*;
 import eu.europa.esig.dss.pades.signature.ExternalCMSService;
 import eu.europa.esig.dss.pades.signature.PAdESService;
@@ -36,6 +37,7 @@ import eu.europa.esig.dss.spi.DSSASN1Utils;
 import eu.europa.esig.dss.spi.DSSPKUtils;
 import eu.europa.esig.dss.spi.DSSSecurityProvider;
 import eu.europa.esig.dss.spi.DSSUtils;
+import eu.europa.esig.dss.spi.policy.SignaturePolicyProvider;
 import eu.europa.esig.dss.spi.validation.CertificateVerifier;
 import eu.europa.esig.dss.spi.validation.CommonCertificateVerifier;
 import eu.europa.esig.dss.spi.validation.SignatureValidationContext;
@@ -49,12 +51,16 @@ import eu.europa.esig.dss.token.*;
 import eu.europa.esig.dss.utils.Utils;
 import eu.europa.esig.dss.validation.CertificateValidator;
 import eu.europa.esig.dss.validation.process.CertificatePolicyIdentifiers;
+import eu.europa.esig.dss.validation.process.bbb.xcv.sub.checks.PolicyTreeNode;
 import eu.europa.esig.dss.validation.reports.CertificateReports;
+import eu.europa.esig.trustedlist.jaxb.tsl.PolicyOrLegalnoticeType;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
 import org.apache.pdfbox.util.Hex;
+import org.bouncycastle.asn1.esf.SignaturePolicyIdentifier;
+import org.bouncycastle.cms.CMSEncryptedData;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInfoGenerator;
 import org.bouncycastle.cms.SignerInformation;
@@ -62,6 +68,7 @@ import org.bouncycastle.operator.DigestCalculatorProvider;
 import org.bouncycastle.tsp.TSPUtil;
 import org.hibernate.validator.internal.constraintvalidators.hv.ISBNValidator;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.logging.LogLevel;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 import org.springframework.util.ResourceUtils;
@@ -77,6 +84,8 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Service
 @AllArgsConstructor
@@ -113,7 +122,7 @@ public class SignService
         DSSDocument toSignDocument = new FileDocument(file);
 
         var params = initParameters();
-        padesService.setTspSource(getTspSource());
+        padesService.setTspSource(getTsaSource());
 
         CertificatesHolder certificatesHolder = queryUserCertificates();
         if (certificatesHolder.isValid())
@@ -147,7 +156,7 @@ public class SignService
         return certificatesHolder;
     }
 
-    public OnlineTSPSource getTspSource()
+    public OnlineTSPSource getTsaSource()
     {
         String tspServer = "https://freetsa.org/tsr";
 
@@ -193,29 +202,20 @@ public class SignService
         //commitmentTypeIndications.add(CommitmentTypeEnum.ProofOfOrigin);
         commitmentTypeIndications.add(CommitmentTypeEnum.ProofOfApproval);
         Policy policy = new Policy();
-        policy.setDescription("COMPL_POL_GenericQualfiedSignatureCreationPolicy");
         policy.setId("1.3.6.1.4.1.49274.1.1.7.2.0");
+        policy.setDescription("COMPL_POL_GenericQualfiedSignatureCreationPolicy");
         policy.setDocumentationReferences("https://testing.itsme-id.com/hubfs/Legal%20Information%20-%20B2B%20Website/Sign%20Document%20Repository/Generic%20Qualified%20Signature%20Policy/compl_pol_genericqualifiedsignaturepolicy-2-0.pdf");
+
+        UserNotice userNotice = new UserNotice();
+        userNotice.setOrganization("MyOrganization");
+        userNotice.setExplicitText("This is the demo explicit text from MyOrganization");
+        userNotice.setNoticeNumbers(1);
+        policy.setQualifier(ObjectIdentifierQualifier.OID_AS_URI);
+        policy.setUserNotice(userNotice);
 
         params.bLevel().setSignaturePolicy(policy);
         params.bLevel().setCommitmentTypeIndications(commitmentTypeIndications);
-        params.bLevel().setClaimedSignerRoles(List.of("Chef"));
-    }
-
-    private void getItsmeCommmitmentForTesting()
-    {
-
-    }
-
-    public CertificateToken getTokenFromJson(JsonObject jsonObject) throws Exception
-    {
-        String certBase64 = jsonObject.getAsString();
-        byte[] certBytes = Base64.getDecoder().decode(certBase64);
-
-        CertificateFactory cf = CertificateFactory.getInstance("X.509");
-        X509Certificate cert = (X509Certificate)cf.generateCertificate(new ByteArrayInputStream(certBytes));
-
-        return new CertificateToken(cert);
+        params.bLevel().setClaimedSignerRoles(List.of("Signataire"));
     }
 
     public DSSDocument sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
@@ -244,7 +244,7 @@ public class SignService
                 signatureParameters.setImageParameters(imageParameters);
             }
 
-            //padesService.setTspSource(getTspSource());
+            //padesService.setTspSource(getTsaSource());
 
             // Only for pades baseline LT (QES only)
             //OnlineOCSPSource onlineOCSPSource = new OnlineOCSPSource();
