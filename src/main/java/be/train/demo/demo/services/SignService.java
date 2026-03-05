@@ -56,8 +56,14 @@ import eu.europa.esig.dss.validation.reports.CertificateReports;
 import eu.europa.esig.trustedlist.jaxb.tsl.PolicyOrLegalnoticeType;
 import lombok.AllArgsConstructor;
 import org.apache.pdfbox.io.IOUtils;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitDestination;
 import org.apache.pdfbox.util.Hex;
 import org.bouncycastle.asn1.esf.SignaturePolicyIdentifier;
 import org.bouncycastle.cms.CMSEncryptedData;
@@ -216,6 +222,21 @@ public class SignService
         params.bLevel().setSignaturePolicy(policy);
         params.bLevel().setCommitmentTypeIndications(commitmentTypeIndications);
         params.bLevel().setClaimedSignerRoles(List.of("Signataire"));
+    }
+
+    public void addSignaturePage() throws Exception
+    {
+        PDDocument document = new PDDocument();
+        PDDocumentCatalog catalog = document.getDocumentCatalog();
+        PDDestination destination = catalog.getDests().getDestination("gg");
+        if (destination == null)
+        {
+            PDPage page = new PDPage();
+            document.addPage(page);
+
+            PDPageFitDestination fitDestination = new PDPageFitDestination();
+            fitDestination.setPage(page);
+        }
     }
 
     public DSSDocument sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
