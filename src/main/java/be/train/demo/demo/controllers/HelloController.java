@@ -5,10 +5,7 @@ import be.train.demo.demo.dtos.eid.*;
 import be.train.demo.demo.services.SignService;
 import be.train.demo.demo.utils.SignatureAlgorithmMapper;
 import eu.europa.esig.dss.enumerations.SignatureAlgorithm;
-import eu.europa.esig.dss.model.DSSDocument;
-import eu.europa.esig.dss.model.Digest;
-import eu.europa.esig.dss.model.FileDocument;
-import eu.europa.esig.dss.model.SignatureValue;
+import eu.europa.esig.dss.model.*;
 import eu.europa.esig.dss.model.x509.CertificateToken;
 import eu.europa.esig.dss.pades.SignatureFieldParameters;
 import jakarta.validation.Valid;
@@ -96,6 +93,24 @@ public class HelloController
         {
             return ResponseEntity.badRequest().body(new SignaturePreparationResponseDTO());
         }
+    }
+
+    @GetMapping("read-page")
+    ResponseEntity<String> readPage()
+    {
+        File file = new File("morepage3.pdf");
+        DSSDocument document = new FileDocument(file);
+        signService.readSignaturePage(document);
+        return ResponseEntity.ok("Page read");
+    }
+
+    @GetMapping("write-page")
+    ResponseEntity<String> writePage()
+    {
+        File file = new File("sample.pdf");
+        DSSDocument document = new FileDocument(file);
+        signService.addSignaturePage(document);
+        return ResponseEntity.ok("Page write");
     }
 
     @PostMapping("/signatures/eid/finalize")

@@ -4,6 +4,7 @@ import be.train.demo.demo.models.CertificatesHolder;
 import be.train.demo.demo.models.SignatureRequest;
 import be.train.demo.demo.utils.SignatureAlgorithmMapper;
 import com.nimbusds.jose.shaded.gson.JsonObject;
+import com.nimbusds.jose.util.Pair;
 import eu.europa.esig.dss.cades.signature.CMSBuilder;
 import eu.europa.esig.dss.cms.CMS;
 import eu.europa.esig.dss.cms.CMSSignedDocument;
@@ -23,9 +24,13 @@ import eu.europa.esig.dss.pades.signature.PAdESWithExternalCMSService;
 import eu.europa.esig.dss.pades.validation.PDFDocumentValidator;
 import eu.europa.esig.dss.pades.validation.timestamp.PdfTimestampToken;
 import eu.europa.esig.dss.pdf.PDFSignatureService;
+import eu.europa.esig.dss.pdf.PdfArray;
+import eu.europa.esig.dss.pdf.PdfObject;
 import eu.europa.esig.dss.pdf.PdfSignatureCache;
+import eu.europa.esig.dss.pdf.pdfbox.PdfBoxDocumentReader;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxNativeObjectFactory;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxSignatureService;
+import eu.europa.esig.dss.pdf.pdfbox.PdfBoxUtils;
 import eu.europa.esig.dss.service.http.commons.CommonsDataLoader;
 import eu.europa.esig.dss.service.http.commons.OCSPDataLoader;
 import eu.europa.esig.dss.service.http.commons.TimestampDataLoader;
@@ -55,15 +60,17 @@ import eu.europa.esig.dss.validation.process.bbb.xcv.sub.checks.PolicyTreeNode;
 import eu.europa.esig.dss.validation.reports.CertificateReports;
 import eu.europa.esig.trustedlist.jaxb.tsl.PolicyOrLegalnoticeType;
 import lombok.AllArgsConstructor;
+import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.ICOSVisitor;
 import org.apache.pdfbox.io.IOUtils;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
-import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.*;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
+import org.apache.pdfbox.pdmodel.common.PDPageLabelRange;
+import org.apache.pdfbox.pdmodel.common.PDPageLabels;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDDestination;
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.*;
 import org.apache.pdfbox.util.Hex;
 import org.bouncycastle.asn1.esf.SignaturePolicyIdentifier;
 import org.bouncycastle.cms.CMSEncryptedData;
@@ -224,18 +231,91 @@ public class SignService
         params.bLevel().setClaimedSignerRoles(List.of("Signataire"));
     }
 
-    public void addSignaturePage() throws Exception
+    public void readSignaturePage(DSSDocument dssDocument)
     {
-        PDDocument document = new PDDocument();
-        PDDocumentCatalog catalog = document.getDocumentCatalog();
-        PDDestination destination = catalog.getDests().getDestination("gg");
-        if (destination == null)
+        try (PdfBoxDocumentReader reader = new PdfBoxDocumentReader(dssDocument))
         {
-            PDPage page = new PDPage();
-            document.addPage(page);
+            PDDocument document = reader.getPDDocument();
+            PDDocumentCatalog catalog = document.getDocumentCatalog();
 
-            PDPageFitDestination fitDestination = new PDPageFitDestination();
-            fitDestination.setPage(page);
+            PDDestination destination = catalog.findNamedDestinationPage(new PDNamedDestination("SpecialSignaturePage"));
+            System.out.println("Is destination found : " + (destination != null));
+
+            PDPageFitDestination fitDestination = (PDPageFitDestination) destination;
+            System.out.println("Is page pointed by the FitDestination valid : " + (fitDestination.getPage() != null) + " | Page Number (should be 2) : " + (fitDestination.retrievePageNumber() + 1));
+
+            int PageNumber = fitDestination.retrievePageNumber() + 1;
+
+            SignatureFieldParameters parameters = new SignatureFieldParameters();
+            parameters.setPage(PageNumber);
+            parameters.setOriginY(50);
+            parameters.setOriginX(50);
+            parameters.setHeight(50);
+            parameters.setWidth(50);
+            //parameters.setFieldId(UUID.randomUUID().toString());
+            //DSSDocument ne = padesService.addNewSignatureField(dssDocument, parameters);
+            //ne.save("signatureField.pdf");
+        }
+        catch (IOException exception)
+        {
+            System.out.println(exception.getMessage());
+        }
+    }
+
+    public void addSignaturePage(DSSDocument dssDocument)
+    {
+        try (PdfBoxDocumentReader reader = new PdfBoxDocumentReader(dssDocument))
+        {
+            PDDocument document = reader.getPDDocument();
+            PDDocumentCatalog catalog = document.getDocumentCatalog();
+            PDDestination destination = catalog.findNamedDestinationPage(new PDNamedDestination("SpecialSignaturePage"));
+            if (destination == null)
+            {
+                // Crée la nouvelle page
+                PDPage page = new PDPage();
+                document.addPage(page);
+
+                // Crée le marqueur de destination et le pointe vers la nouvelle page
+                PDPageFitDestination fitDestination = new PDPageFitDestination();
+                fitDestination.setPage(page);
+
+                // Crée un dictionnaire de Names au besoin
+                PDDocumentNameDictionary nameDictionary = catalog.getNames();
+                if (nameDictionary == null)
+                {
+                    nameDictionary = new PDDocumentNameDictionary(catalog);
+                    catalog.setNames(nameDictionary);
+                }
+
+                // Récupère le noeud des destinations et le crée au besoin
+                PDDestinationNameTreeNode nameTreeNode = nameDictionary.getDests();
+                if (nameTreeNode == null)
+                {
+                    nameTreeNode = new PDDestinationNameTreeNode();
+                    nameDictionary.setDests(nameTreeNode);
+                }
+
+                Map<String, PDPageDestination> destNames = nameTreeNode.getNames();
+                if (destNames == null)
+                {
+                    // On crée le dictionnaire des Names
+                    destNames = new HashMap<>();
+                }
+
+                // On ajoute notre marqueur spécial qui pointe vers la page dans le dictionnaire
+                destNames.put("SpecialSignaturePage", fitDestination);
+                nameTreeNode.setNames(destNames);
+
+                document.save("morepage3.pdf");
+            }
+            else
+            {
+                System.out.println("Destination found !");
+            }
+        }
+        catch (IOException exception)
+        {
+            System.out.println(exception.getMessage());
         }
     }
 
