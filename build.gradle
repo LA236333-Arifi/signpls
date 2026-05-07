@@ -27,8 +27,6 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
-	//implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 
 	implementation 'eu.europa.ec.joinup.sd-dss:dss-pades-pdfbox:6.3'
@@ -38,19 +36,12 @@ dependencies {
 	implementation 'eu.europa.ec.joinup.sd-dss:dss-service:6.3'
 	implementation 'eu.europa.ec.joinup.sd-dss:dss-validation:6.3'
 
-	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server'
-	//implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
-
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-mail-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-web-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

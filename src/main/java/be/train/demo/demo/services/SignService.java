@@ -1,10 +1,10 @@
 package be.train.demo.demo.services;
 
 import be.train.demo.demo.models.CertificatesHolder;
+import be.train.demo.demo.models.SignOutput;
 import be.train.demo.demo.models.SignatureRequest;
+import be.train.demo.demo.models.WebeIDSignaturePreparationResponse;
 import be.train.demo.demo.utils.SignatureAlgorithmMapper;
-import com.nimbusds.jose.shaded.gson.JsonObject;
-import com.nimbusds.jose.util.Pair;
 import eu.europa.esig.dss.cades.signature.CMSBuilder;
 import eu.europa.esig.dss.cms.CMS;
 import eu.europa.esig.dss.cms.CMSSignedDocument;
@@ -85,6 +85,7 @@ import org.springframework.boot.logging.LogLevel;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 import org.springframework.util.ResourceUtils;
+import org.springframework.web.client.RestClient;
 import tools.jackson.core.ObjectReadContext;
 
 import javax.swing.text.DefaultEditorKit;
@@ -110,64 +111,10 @@ public class SignService
     private final PdfBoxSignatureService pdfBoxSignatureService;
     private final static String defaultCert = "self-signed.p12";
     private final static String defaultPass = "changeit";
-    private static String FilenameCertificateP12 = defaultCert;
-    private static String PasswordCertificateP12 = defaultPass;
     private static CertificateToken currentCertificate;
     private static PdfSignatureCache currentSignatureCache;
     private static Date currentDate;
     private static Digest currentMessageDigest;
-
-    public void PushCertificateForDemo(String cert, String pass)
-    {
-        FilenameCertificateP12 = cert;
-        PasswordCertificateP12 = pass;
-    }
-
-    public void PopCertificateForDemo()
-    {
-        FilenameCertificateP12 = defaultCert;
-        PasswordCertificateP12 = defaultPass;
-    }
-
-    public void clientSidePadesForRemoteSigning() throws Exception
-    {
-        File file = new File("sample.pdf");
-        DSSDocument toSignDocument = new FileDocument(file);
-
-        var params = initParameters();
-        padesService.setTspSource(getTsaSource());
-
-        CertificatesHolder certificatesHolder = queryUserCertificates();
-        if (certificatesHolder.isValid())
-        {
-            params.setSigningCertificate(certificatesHolder.getCertificate());
-            params.setCertificateChain(certificatesHolder.getCertificateChain());
-        }
-
-        ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
-        byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
-        DSSMessageDigest messageDigest = new DSSMessageDigest(params.getDigestAlgorithm(), digest);
-        SignatureValue remoteSignature = computeSignatureValueRemotely(messageDigest);
-
-        DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, remoteSignature);
-        signedDocument.save("remotepdf.pdf");
-    }
-
-    private CertificatesHolder queryUserCertificates() throws Exception
-    {
-        //fixme: these are just dummy certificates - replace with real implementation
-        CertificatesHolder certificatesHolder = new CertificatesHolder();
-        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection(PasswordCertificateP12.toCharArray());
-        File p12File = new File(FilenameCertificateP12);
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken(p12File, pp))
-        {
-            // Set the signing certificate and a certificate chain for the used token
-            DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
-            certificatesHolder.setCertificate(privateKey.getCertificate());
-            certificatesHolder.setCertificateChain(privateKey.getCertificateChain());
-        }
-        return certificatesHolder;
-    }
 
     public OnlineTSPSource getTsaSource()
     {
@@ -193,11 +140,11 @@ public class SignService
     private PAdESSignatureParameters initParameters()
     {
         PAdESSignatureParameters signatureParameters = new PAdESSignatureParameters();
-        signatureParameters.setAppName("MY SUPER DEMO APP");
+        signatureParameters.setAppName("SignElec");
         signatureParameters.setSignatureLevel(getDefaultSignatureLevel());
         signatureParameters.setDigestAlgorithm(getDefaultDigestAlgorithm());
-        signatureParameters.setReason("La raison est simple xyz");
-        signatureParameters.setSignerName("Jean Claude");
+        signatureParameters.setReason("Signature du document SignElec");
+        //signatureParameters.setSignerName("Jean Claude");
         signatureParameters.setLocation("Belgium");
         signatureParameters.setContentSize(15000);
 
@@ -319,11 +266,10 @@ public class SignService
         }
     }
 
-    public DSSDocument sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
+    public SignOutput sign(DSSDocument toSignDocument, Optional<SignatureFieldParameters> fieldParameters) throws Exception
     {
-        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection(PasswordCertificateP12.toCharArray());
-        File p12File = new File(FilenameCertificateP12);
-        System.out.println("Cert: " + FilenameCertificateP12 + " | Pass : " + PasswordCertificateP12);
+        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection(defaultPass.toCharArray());
+        File p12File = new File(defaultCert);
         try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken(p12File, pp))
         {
             PAdESSignatureParameters signatureParameters = initParameters();
@@ -332,8 +278,6 @@ public class SignService
             DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
             signatureParameters.setSigningCertificate(privateKey.getCertificate());
             signatureParameters.setCertificateChain(privateKey.getCertificateChain());
-
-            System.out.println("Bas64: " + Base64.getEncoder().encode(privateKey.getCertificate().getEncoded()));
 
             // initialize signature field parameters
             // the origin is the left and top corner of the page
@@ -347,28 +291,13 @@ public class SignService
 
             //padesService.setTspSource(getTsaSource());
 
-            // Only for pades baseline LT (QES only)
-            //OnlineOCSPSource onlineOCSPSource = new OnlineOCSPSource();
-            //onlineOCSPSource.setDataLoader(new OCSPDataLoader());
-            //certificateVerifier.setOcspSource(onlineOCSPSource);
-
             // Sign in three steps using the document obtained after the first signature
             ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, signatureParameters);
             SignatureValue signatureValue = goodUserToken.sign(dataToSign, signatureParameters.getDigestAlgorithm(), privateKey);
             DSSDocument signedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
-            signedDocument.save("signedpdf.pdf");
-            return signedDocument;
-        }
-    }
 
-    private SignatureValue computeSignatureValueRemotely(DSSMessageDigest messageDigest) throws Exception
-    {
-        //TODO: replace that with the remote integration
-        KeyStore.PasswordProtection pp = new KeyStore.PasswordProtection(PasswordCertificateP12.toCharArray());
-        File p12File = new File(FilenameCertificateP12);
-        try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken(p12File, pp))
-        {
-            return goodUserToken.signDigest(messageDigest, goodUserToken.getKeys().getFirst());
+            SignOutput output = new SignOutput(signatureValue, signedDocument);
+            return output;
         }
     }
 
@@ -377,33 +306,16 @@ public class SignService
      * using the input certificate.
      * Implementation for Web eID
      * */
-    public Digest prepareSignature(CertificateToken certificateToken) throws Exception
+    public Digest prepareSignature(DSSDocument toSignDocument, CertificateToken certificateToken, Date signingDate) throws Exception
     {
-        File file = new File("sample.pdf");
-        DSSDocument toSignDocument = new FileDocument(file);
-
-        SignatureRequest signatureRequest = new SignatureRequest();
-
         var params = initParameters();
+        params.bLevel().setSigningDate(signingDate);
         params.setSigningCertificate(certificateToken);
-
-        // Le cache est primordial à stocker car il va contenir le document préparé
-        // ainsi que son hash. Sans ça, la signature est invalide.
-        currentCertificate = certificateToken;
-        currentDate = params.getSigningDate();
 
         ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
 
         byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
         Digest messageDigest = new Digest(params.getDigestAlgorithm(), digest);
-        currentMessageDigest = messageDigest;
-
-        String certificateBytesBase64 = Base64.getEncoder().encodeToString(certificateToken.getCertificate().getEncoded());
-
-        signatureRequest.setSigningDate(params.getSigningDate());
-        signatureRequest.setDataToSignDigest(messageDigest);
-        signatureRequest.setCertificateBase64(certificateBytesBase64);
-        // Save the signatureRequest in the DB
 
         return messageDigest;
     }
@@ -413,26 +325,20 @@ public class SignService
      * that is embedded in the document.
      * Implementation for Web eID
      * */
-    public void finalizeSignature(SignatureValue signatureValue) throws Exception
+    public DSSDocument finalizeSignature(DSSDocument toSignDocument, SignatureValue signatureValue, CertificateToken certificateToken, Date signingDate, Digest messageDigest) throws Exception
     {
-        File file = new File("sample.pdf");
-        DSSDocument toSignDocument = new FileDocument(file);
-
         var params = initParameters();
-        params.setSigningCertificate(currentCertificate);
-        params.bLevel().setSigningDate(currentDate);
+        params.setSigningCertificate(certificateToken);
+        params.bLevel().setSigningDate(signingDate);
 
-        Digest messageDigest = currentMessageDigest;
-        CertificateToken certificateToken = params.getSigningCertificate();
         SignatureAlgorithm signatureAlgorithm = params.getSignatureAlgorithm();
-
         if (!validateSignature(messageDigest, signatureValue, certificateToken, signatureAlgorithm))
         {
             throw new SignatureException("Signature value is wrong");
         }
 
         DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
-        signedDocument.save("finalizedflow.pdf");
+        return signedDocument;
     }
 
 
