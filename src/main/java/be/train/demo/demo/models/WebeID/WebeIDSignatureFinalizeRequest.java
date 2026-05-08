@@ -1,16 +1,16 @@
-package be.train.demo.demo.models;
+package be.train.demo.demo.models.WebeID;
 
 import be.train.demo.demo.dtos.eid.SignatureAlgorithmDTO;
+import be.train.demo.demo.models.DefautSignatureParameters;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 
 @NoArgsConstructor
@@ -26,32 +26,17 @@ public class WebeIDSignatureFinalizeRequest
     @JsonProperty("signature")
     String signatureBase64;
 
+    @JsonProperty("signatureAlgorithm")
+    SignatureAlgorithmDTO signatureAlgorithmDTO;
+
     @NotBlank
     @JsonProperty("certificate")
     private String certificateBase64;
 
-    @NotBlank
-    private String signingDate;
+    @NotNull
+    private Date signingDate;
 
     @NotBlank
     @JsonProperty("hash")
     private String hashValue;
-
-    @JsonProperty("signatureAlgorithm")
-    SignatureAlgorithmDTO signatureAlgorithmDTO;
-
-    public Date getSigningDate()
-    {
-        try
-        {
-            SimpleDateFormat formateur = new SimpleDateFormat("yyyyMMdd");
-            Date date = formateur.parse(signingDate);
-            return date;
-        }
-        catch (ParseException e)
-        {
-            e.printStackTrace();
-            return new Date();
-        }
-    }
 }

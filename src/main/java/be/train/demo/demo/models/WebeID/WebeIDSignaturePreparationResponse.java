@@ -1,9 +1,7 @@
-package be.train.demo.demo.models;
+package be.train.demo.demo.models.WebeID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import eu.europa.esig.dss.model.Digest;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,4 +22,7 @@ public class WebeIDSignaturePreparationResponse
     @NotBlank
     @JsonProperty("hashFunction")
     private String hashFunction;
+
+    @NotBlank
+    private Date signingDate;
 }

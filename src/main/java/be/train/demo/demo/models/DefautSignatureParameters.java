@@ -1,6 +1,6 @@
 package be.train.demo.demo.models;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import be.train.demo.demo.utils.SignConstants;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -17,6 +17,5 @@ public class DefautSignatureParameters
     @NotBlank
     private String pdfBase64;
 
-    @NotBlank
-    private String hashFunction;
+    private String hashFunction = SignConstants.SHA_256;
 }

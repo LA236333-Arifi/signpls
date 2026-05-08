@@ -1,105 +1,33 @@
 package be.train.demo.demo.services;
 
-import be.train.demo.demo.models.CertificatesHolder;
 import be.train.demo.demo.models.SignOutput;
-import be.train.demo.demo.models.SignatureRequest;
-import be.train.demo.demo.models.WebeIDSignaturePreparationResponse;
+import be.train.demo.demo.models.WebeID.WebeIDSignPrepareOutput;
 import be.train.demo.demo.utils.SignatureAlgorithmMapper;
-import eu.europa.esig.dss.cades.signature.CMSBuilder;
-import eu.europa.esig.dss.cms.CMS;
-import eu.europa.esig.dss.cms.CMSSignedDocument;
-import eu.europa.esig.dss.cms.CMSUtils;
-import eu.europa.esig.dss.detailedreport.DetailedReport;
-import eu.europa.esig.dss.diagnostic.DiagnosticData;
 import eu.europa.esig.dss.enumerations.*;
 import eu.europa.esig.dss.model.*;
 import eu.europa.esig.dss.model.Policy;
-import eu.europa.esig.dss.model.signature.SignaturePolicy;
 import eu.europa.esig.dss.model.x509.CertificateToken;
-import eu.europa.esig.dss.model.x509.extension.PolicyConstraints;
 import eu.europa.esig.dss.pades.*;
-import eu.europa.esig.dss.pades.signature.ExternalCMSService;
 import eu.europa.esig.dss.pades.signature.PAdESService;
-import eu.europa.esig.dss.pades.signature.PAdESWithExternalCMSService;
-import eu.europa.esig.dss.pades.validation.PDFDocumentValidator;
-import eu.europa.esig.dss.pades.validation.timestamp.PdfTimestampToken;
-import eu.europa.esig.dss.pdf.PDFSignatureService;
-import eu.europa.esig.dss.pdf.PdfArray;
-import eu.europa.esig.dss.pdf.PdfObject;
 import eu.europa.esig.dss.pdf.PdfSignatureCache;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxDocumentReader;
-import eu.europa.esig.dss.pdf.pdfbox.PdfBoxNativeObjectFactory;
 import eu.europa.esig.dss.pdf.pdfbox.PdfBoxSignatureService;
-import eu.europa.esig.dss.pdf.pdfbox.PdfBoxUtils;
-import eu.europa.esig.dss.service.http.commons.CommonsDataLoader;
-import eu.europa.esig.dss.service.http.commons.OCSPDataLoader;
 import eu.europa.esig.dss.service.http.commons.TimestampDataLoader;
-import eu.europa.esig.dss.service.ocsp.OnlineOCSPSource;
 import eu.europa.esig.dss.service.tsp.OnlineTSPSource;
 import eu.europa.esig.dss.signature.SignatureValueChecker;
-import eu.europa.esig.dss.simplecertificatereport.SimpleCertificateReport;
-import eu.europa.esig.dss.spi.DSSASN1Utils;
-import eu.europa.esig.dss.spi.DSSPKUtils;
 import eu.europa.esig.dss.spi.DSSSecurityProvider;
 import eu.europa.esig.dss.spi.DSSUtils;
-import eu.europa.esig.dss.spi.policy.SignaturePolicyProvider;
 import eu.europa.esig.dss.spi.validation.CertificateVerifier;
 import eu.europa.esig.dss.spi.validation.CommonCertificateVerifier;
-import eu.europa.esig.dss.spi.validation.SignatureValidationContext;
-import eu.europa.esig.dss.spi.x509.revocation.crl.CRLToken;
-import eu.europa.esig.dss.spi.x509.revocation.ocsp.OCSPCertificateSource;
-import eu.europa.esig.dss.spi.x509.revocation.ocsp.OCSPToken;
-import eu.europa.esig.dss.spi.x509.revocation.ocsp.OfflineOCSPSource;
-import eu.europa.esig.dss.spi.x509.tsp.TSPSource;
-import eu.europa.esig.dss.spi.x509.tsp.TimestampToken;
 import eu.europa.esig.dss.token.*;
-import eu.europa.esig.dss.utils.Utils;
-import eu.europa.esig.dss.validation.CertificateValidator;
-import eu.europa.esig.dss.validation.process.CertificatePolicyIdentifiers;
-import eu.europa.esig.dss.validation.process.bbb.xcv.sub.checks.PolicyTreeNode;
-import eu.europa.esig.dss.validation.reports.CertificateReports;
-import eu.europa.esig.trustedlist.jaxb.tsl.PolicyOrLegalnoticeType;
 import lombok.AllArgsConstructor;
-import org.apache.pdfbox.cos.COSDictionary;
-import org.apache.pdfbox.cos.COSName;
-import org.apache.pdfbox.cos.ICOSVisitor;
-import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.*;
-import org.apache.pdfbox.pdmodel.common.PDMetadata;
-import org.apache.pdfbox.pdmodel.common.PDPageLabelRange;
-import org.apache.pdfbox.pdmodel.common.PDPageLabels;
-import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
-import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.*;
-import org.apache.pdfbox.util.Hex;
-import org.bouncycastle.asn1.esf.SignaturePolicyIdentifier;
-import org.bouncycastle.cms.CMSEncryptedData;
-import org.bouncycastle.cms.CMSSignedData;
-import org.bouncycastle.cms.SignerInfoGenerator;
-import org.bouncycastle.cms.SignerInformation;
-import org.bouncycastle.operator.DigestCalculatorProvider;
-import org.bouncycastle.tsp.TSPUtil;
-import org.hibernate.validator.internal.constraintvalidators.hv.ISBNValidator;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.logging.LogLevel;
 import org.springframework.stereotype.Service;
-import org.springframework.util.MimeType;
-import org.springframework.util.ResourceUtils;
-import org.springframework.web.client.RestClient;
-import tools.jackson.core.ObjectReadContext;
 
-import javax.swing.text.DefaultEditorKit;
-import javax.swing.text.Document;
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.*;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 @Service
 @AllArgsConstructor
@@ -296,7 +224,7 @@ public class SignService
             SignatureValue signatureValue = goodUserToken.sign(dataToSign, signatureParameters.getDigestAlgorithm(), privateKey);
             DSSDocument signedDocument = padesService.signDocument(toSignDocument, signatureParameters, signatureValue);
 
-            SignOutput output = new SignOutput(signatureValue, signedDocument);
+            SignOutput output = new SignOutput(signatureValue, signedDocument, signatureParameters.getDigestAlgorithm());
             return output;
         }
     }
@@ -306,10 +234,9 @@ public class SignService
      * using the input certificate.
      * Implementation for Web eID
      * */
-    public Digest prepareSignature(DSSDocument toSignDocument, CertificateToken certificateToken, Date signingDate) throws Exception
+    public WebeIDSignPrepareOutput prepareSignature(DSSDocument toSignDocument, CertificateToken certificateToken) throws Exception
     {
-        var params = initParameters();
-        params.bLevel().setSigningDate(signingDate);
+        PAdESSignatureParameters params = initParameters();
         params.setSigningCertificate(certificateToken);
 
         ToBeSigned dataToSign = padesService.getDataToSign(toSignDocument, params);
@@ -317,7 +244,7 @@ public class SignService
         byte[] digest = DSSUtils.digest(params.getDigestAlgorithm(), dataToSign.getBytes());
         Digest messageDigest = new Digest(params.getDigestAlgorithm(), digest);
 
-        return messageDigest;
+        return new WebeIDSignPrepareOutput(messageDigest, params.getSigningDate(), params.getDigestAlgorithm());
     }
 
     /**
@@ -325,7 +252,7 @@ public class SignService
      * that is embedded in the document.
      * Implementation for Web eID
      * */
-    public DSSDocument finalizeSignature(DSSDocument toSignDocument, SignatureValue signatureValue, CertificateToken certificateToken, Date signingDate, Digest messageDigest) throws Exception
+    public SignOutput finalizeSignature(DSSDocument toSignDocument, SignatureValue signatureValue, CertificateToken certificateToken, Date signingDate, Digest messageDigest) throws Exception
     {
         var params = initParameters();
         params.setSigningCertificate(certificateToken);
@@ -338,7 +265,8 @@ public class SignService
         }
 
         DSSDocument signedDocument = padesService.signDocument(toSignDocument, params, signatureValue);
-        return signedDocument;
+        SignOutput output = new SignOutput(signatureValue, signedDocument, params.getDigestAlgorithm());
+        return output;
     }
 
 

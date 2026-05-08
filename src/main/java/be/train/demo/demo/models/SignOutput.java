@@ -1,5 +1,6 @@
 package be.train.demo.demo.models;
 
+import eu.europa.esig.dss.enumerations.DigestAlgorithm;
 import eu.europa.esig.dss.model.DSSDocument;
 import eu.europa.esig.dss.model.SignatureValue;
 import jakarta.validation.constraints.NotNull;
@@ -16,4 +17,5 @@ public class SignOutput
 {
     private SignatureValue signatureValue;
     private DSSDocument signedDocument;
+    private DigestAlgorithm digestAlgorithm;
 }
