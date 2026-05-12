@@ -1,0 +1,24 @@
+package be.sbim.models;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+public class SignInput
+{
+    @NotBlank
+    private String nom;
+
+    @NotBlank
+    private String prenom;
+
+    private int signaturePosition = 1;
+
+    private int page = 1;
+}

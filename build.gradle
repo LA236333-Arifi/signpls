@@ -4,9 +4,9 @@ plugins {
 	id 'io.spring.dependency-management' version '1.1.7'
 }
 
-group = 'be.train.demo'
+group = 'be.sbim'
 version = '0.0.1-SNAPSHOT'
-description = 'demo'
+description = 'SignElec'
 
 java {
 	toolchain {
@@ -41,7 +41,7 @@ dependencies {
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-web-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -50,10 +50,10 @@ tasks.named('test') {
 }
 
 springBoot {
-	mainClass = 'be.train.demo.demo.DemoApplication'
+	mainClass = 'be.sbim.SignElecApplication'
 }
 
 tasks.named('bootJar') {
 	// Nom du JAR final
-	archiveFileName = 'demosignature.jar'
+	archiveFileName = 'SignElec.jar'
 }
