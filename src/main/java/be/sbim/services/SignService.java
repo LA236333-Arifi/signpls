@@ -34,7 +34,6 @@ public class SignService
 {
     private final CertificateVerifier certificateVerifier = new CommonCertificateVerifier();
     private final PAdESService padesService = new PAdESService(certificateVerifier);
-    //private final static DSSDocument signatureImage = new InMemoryDocument(getClass().getResourceAsStream("/signature-pen.png"), "signature-pen", MimeTypeEnum.PNG);
     private final PdfBoxSignatureService pdfBoxSignatureService;
     private final static String defaultCert = "self-signed.p12";
     private final static String defaultPass = "changeit";
@@ -117,10 +116,30 @@ public class SignService
         imageParameters.setTextParameters(textParameters);
         signatureParameters.setImageParameters(imageParameters);
 
-        // Je mets quoi ici ?
-        //fieldParameters.setOriginX(0);
-        //fieldParameters.setOriginY(0);
-        fieldParameters.setPage(pageNumber);
+        int idx = signaturePosition - 1;
+        if (idx < 0 || idx >= SignConstants.SignaturesPerPage)
+        {
+            throw new IllegalArgumentException("signaturePosition doit être entre 1 et "
+                    + SignConstants.SignaturesPerPage);
+        }
+        int col = idx % SignConstants.GridCols;
+        int row = idx / SignConstants.GridCols;
+
+        float usableW = SignConstants.PageWidth  - 2 * SignConstants.PageMargin;
+        float usableH = SignConstants.PageHeight - 2 * SignConstants.PageMargin;
+        float cellW   = usableW / SignConstants.GridCols;
+        float cellH   = usableH / SignConstants.GridRows;
+
+        float originX = SignConstants.PageMargin + col * cellW + SignConstants.CellPadding / 2f;
+        float originY = SignConstants.PageMargin + row * cellH + SignConstants.CellPadding / 2f;
+        float width   = cellW - SignConstants.CellPadding;
+        float height  = cellH - SignConstants.CellPadding;
+
+        fieldParameters.setOriginX(originX);
+        fieldParameters.setOriginY(originY);
+        fieldParameters.setWidth(width);
+        fieldParameters.setHeight(height);
+        fieldParameters.setPage(pageNumber); // 1-indexed
 
         String nomAvecInitialeMaj = nom.substring(0, 1).toUpperCase() + nom.substring(1);
         String prenomAvecInitialeMaj = prenom.substring(0, 1).toUpperCase() + prenom.substring(1);
@@ -140,6 +159,7 @@ public class SignService
         {
             PAdESSignatureParameters signatureParameters = getVisualSignatureParameters(signInput.getNom(), signInput.getPrenom(), signInput.getSignaturePosition(), signInput.getPage());
             signatureParameters.setDigestAlgorithm(digestAlgorithm);
+
             // Set the signing certificate and a certificate chain for the used token
             DSSPrivateKeyEntry privateKey = goodUserToken.getKeys().getFirst();
             signatureParameters.setSigningCertificate(privateKey.getCertificate());
