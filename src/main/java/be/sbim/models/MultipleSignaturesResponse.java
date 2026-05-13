@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @NoArgsConstructor
@@ -16,5 +17,5 @@ import java.util.List;
 public class MultipleSignaturesResponse
 {
     @Valid @NotEmpty
-    List<SimpleSignatureResponse> signatureResponses;
+    List<SimpleSignatureResponse> signatureResponses = new ArrayList<>();
 }

@@ -17,6 +17,4 @@ public class SignerInfo
 
     @NotBlank
     private String prenom;
-
-    private int signaturePosition = 1;
 }

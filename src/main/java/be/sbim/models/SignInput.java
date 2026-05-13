@@ -18,7 +18,5 @@ public class SignInput
     @NotBlank
     private String prenom;
 
-    private int signaturePosition = 1;
-
     private int page = 1;
 }

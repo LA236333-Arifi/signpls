@@ -143,12 +143,26 @@ public class SignService
 
         String nomAvecInitialeMaj = nom.substring(0, 1).toUpperCase() + nom.substring(1);
         String prenomAvecInitialeMaj = prenom.substring(0, 1).toUpperCase() + prenom.substring(1);
-        String signerName = nomAvecInitialeMaj + prenomAvecInitialeMaj;
+        String signerName = nomAvecInitialeMaj + ' ' + prenomAvecInitialeMaj;
         signatureParameters.setSignerName(signerName);
         textParameters.setText(signerName);
         textParameters.setFont(font);
         textParameters.setPadding(20);
         return signatureParameters;
+    }
+
+    public int getSignaturePosition(DSSDocument toSignDocument)
+    {
+        try (PdfBoxDocumentReader reader = new PdfBoxDocumentReader(toSignDocument))
+        {
+            PDDocument document = reader.getPDDocument();
+            return document.getSignatureFields().size() + 1;
+        }
+        catch (IOException exception)
+        {
+            System.out.println(exception.getMessage());
+            throw new RuntimeException();
+        }
     }
 
     public SignOutput sign(DSSDocument toSignDocument, DigestAlgorithm digestAlgorithm, SignInput signInput) throws Exception
@@ -157,7 +171,8 @@ public class SignService
         File p12File = new File(defaultCert);
         try (SignatureTokenConnection goodUserToken = new Pkcs12SignatureToken(p12File, pp))
         {
-            PAdESSignatureParameters signatureParameters = getVisualSignatureParameters(signInput.getNom(), signInput.getPrenom(), signInput.getSignaturePosition(), signInput.getPage());
+            int signaturePosition = getSignaturePosition(toSignDocument);
+            PAdESSignatureParameters signatureParameters = getVisualSignatureParameters(signInput.getNom(), signInput.getPrenom(), signaturePosition, signInput.getPage());
             signatureParameters.setDigestAlgorithm(digestAlgorithm);
 
             // Set the signing certificate and a certificate chain for the used token
@@ -184,6 +199,7 @@ public class SignService
      * */
     public WebeIDSignPrepareOutput prepareSignature(DSSDocument toSignDocument, CertificateToken certificateToken) throws Exception
     {
+        // Peut être faut il appeler getVisualSignatureParameters() à la place ?
         PAdESSignatureParameters params = initParameters();
         params.setSigningCertificate(certificateToken);
 
@@ -202,6 +218,7 @@ public class SignService
      * */
     public SignOutput finalizeSignature(DSSDocument toSignDocument, SignatureValue signatureValue, CertificateToken certificateToken, Date signingDate, Digest messageDigest) throws Exception
     {
+        // Peut être faut il appeler getVisualSignatureParameters() à la place ?
         var params = initParameters();
         params.setSigningCertificate(certificateToken);
         params.bLevel().setSigningDate(signingDate);
@@ -237,7 +254,6 @@ public class SignService
 
             Signature signature = Signature.getInstance(signatureValue.getAlgorithm().getJCEId(), DSSSecurityProvider.getSecurityProviderName());
             System.out.println("Signature Algorithm: " + signatureValue.getAlgorithm().getJCEId());
-            System.out.println("Public Key infomration: " + signingCertificate.getPublicKey());
             signature.initVerify(signingCertificate.getPublicKey());
             signature.update(digest.getValue());
             boolean debugVerify = signature.verify(signatureValue.getValue());

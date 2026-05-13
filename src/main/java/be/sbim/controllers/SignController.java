@@ -48,7 +48,7 @@ public class SignController
 
                 int page = signService.getSignaturePage(toSignDocument);
                 SignerInfo signerInfo = signatureParams.getSignerInfo();
-                SignInput signInput = new SignInput(signerInfo.getNom(), signerInfo.getPrenom(), signerInfo.getSignaturePosition(), page);
+                SignInput signInput = new SignInput(signerInfo.getNom(), signerInfo.getPrenom(), page);
                 DigestAlgorithm digestAlgorithm = SignatureAlgorithmMapper.getDigestAlgorithm(signatureParams.getHashFunction());
 
                 SignOutput signOutput = signService.sign(toSignDocument, digestAlgorithm, signInput);
