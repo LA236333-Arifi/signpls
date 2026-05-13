@@ -147,7 +147,7 @@ public class SignService
         signatureParameters.setSignerName(signerName);
         textParameters.setText(signerName);
         textParameters.setFont(font);
-        textParameters.setPadding(20);
+        textParameters.setPadding(5);
         return signatureParameters;
     }
 
